@@ -51,6 +51,11 @@
         "thread": "cpp",
         "cinttypes": "cpp",
         "typeinfo": "cpp",
-        "bit": "cpp"
-    }
+        "bit": "cpp",
+        "condition_variable": "cpp",
+        "mutex": "cpp",
+        "shared_mutex": "cpp"
+    },
+    "OpenCL.server.deviceID": 2208067589,
+    "OpenCL.explorer.localizedProperties": true
 }
