@@ -5,14 +5,13 @@
             "name": "(gdb) Launch",
             "type": "cppdbg",
             "request": "launch",
-            "program": "./parseDataSet",
+            "program": "${workspaceFolder}/encoding/dummy",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${fileDirname}",
             "environment": [],
             "externalConsole": false,
             "MIMode": "gdb",
-            "preLaunchTask": "compile",
             "setupCommands": [
                 {
                     "description": "Enable pretty-printing for gdb",
@@ -25,6 +24,6 @@
                     "ignoreFailures": true
                 }
             ]
-        }
+        },
     ]
 }
