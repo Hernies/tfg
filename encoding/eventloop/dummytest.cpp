@@ -93,7 +93,7 @@ private:
 };
 
 void connect(MYSQL* conn, EventLoop& loop){
-        std::promise<MYSQL*> connectionPromise;
+    std::promise<MYSQL*> connectionPromise;
 
     auto asyncFunc = [conn]() {
         mysql_real_connect_nonblocking(conn, "localhost", "root", "root", "datasets", 3306, NULL, 0);
@@ -108,7 +108,6 @@ void connect(MYSQL* conn, EventLoop& loop){
         connectionPromise.set_value(conn);
 
     };
-
 
     loop.postTask(asyncFunc, condition, fulfillPromise);
     // Wait for the connection to be established

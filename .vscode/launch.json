@@ -2,11 +2,11 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "(gdb) Launch",
+            "name": "(gdb) Launch host",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/encoding/dummy",
-            "args": [],
+            "program": "${workspaceFolder}/encoding/host",
+            "args": [1, 1, 200, 5, 256],
             "stopAtEntry": false,
             "cwd": "${fileDirname}",
             "environment": [],
