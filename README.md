@@ -21,11 +21,15 @@ SET SESSION time_zone = '+00:00';
 ### Eventloop future fixes
 en vez de tupla de 3 elementos y ejecutar 3 lambdas, el propio condition podría hacer el fullfill promise y así ahorrar una ejecución de función lambda
 
-g++ -g -Wall -std=c++2a -Ieventloop host.cpp -lpthread -L /usr/lib/x86_64-linux-gnu -lmysqlclient -o host
+g++ -g -Wall -std=c++2a -Ieventloop host.cpp -lpthread -L /usr/lib/x86_64-linux-gnu -lmysqlclient -lOpenCL -o host
 
-test: ./host 1 1 1000 2 256
+test: 
+./host 1 1 1000 2 1
 
 **si da core dumped y funcionaba antes, mira el tamaño de serie que definiste**
+
+
+
 
 ## MEMORIA
 
@@ -35,7 +39,9 @@ tools->commands->Biber
 y luego ya compilar con pdflatex
 
 
+# Compilación de programas
 g++ -g traversecsv.cpp  -o traversecsv -lmysqlcppconn
-g++ -o host host.cpp -L /usr/lib/x86_64-linux-gnu -lmysqlclient -lpthread
+
+g++ -g -Wall -std=c++2a -Ieventloop -Ihashmap -Isafequeue host.cpp -lpthread -L /usr/lib/x86_64-linux-gnu -lmysqlclient -o host
 
 
