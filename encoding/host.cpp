@@ -65,12 +65,7 @@ struct Series {
     int max[10];
 };
 
-struct CLSeries {
-    float dataPoints[SERIES_SIZE][10];
-};
-struct CLminmax {
-    float value[20];
-};
+
 //Thread safe data structures
 CTSL::HashMap <int, Series> seriesMap;
 SafeQueue<int> seriesQueue;
@@ -302,269 +297,39 @@ void extractor (MYSQL* connObject, int house, int batchSize, int times) {
 
 
 void thGPUIO(){
-    cl_int err;
-    cl_platform_id platform;
-    cl_device_id device;
-    cl_context context;
-    cl_command_queue queue;
     
-
-    err = clGetPlatformIDs(1, &platform, nullptr); 
-    // Get the GPU devihow to instantiate a ce
-    err = clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, 1, &device, nullptr); 
-    // Create a context
-    context = clCreateContext(nullptr, 1, &device, nullptr, nullptr, &err); 
-    // Create a command queue
-    queue = clCreateCommandQueueWithProperties(context, device, nullptr, &err); 
-
-    const int numStructs = 10;
-    const int vectorLength = 256;
-    const int numVectors = 10;
-    // Allocate buffers
-    size_t inputBufferSize = numVectors * vectorLength * numStructs * sizeof(float);
-    size_t minMaxBufferSize = numVectors * vectorLength * numStructs * sizeof(float);
-    size_t outputBufferSize = numVectors * vectorLength * numStructs * sizeof(float);
-    size_t gafBufferSize = numVectors * vectorLength * vectorLength * numStructs * sizeof(float);
-
-    cl_mem inputBuffer = clCreateBuffer(context, CL_MEM_READ_ONLY, inputBufferSize, nullptr, &err); 
-    cl_mem minMaxBuffer = clCreateBuffer(context, CL_MEM_WRITE_ONLY, minMaxBufferSize, nullptr, &err); 
-    cl_mem outputBuffer = clCreateBuffer(context, CL_MEM_WRITE_ONLY, outputBufferSize, nullptr, &err);
-    cl_mem gafBuffer = clCreateBuffer(context, CL_MEM_WRITE_ONLY, gafBufferSize, nullptr, &err);
-
-   const char *ajusteypolar = R"(
-    __kernel void computeArccos(__global const float *minMaxBuffer, __global float *seriesBuffer, __global float *outputBuffer) {
-        #pragma OPENCL EXTENSION cl_amd_printf : enable
-        // Get global IDs
-        int vectorIdx = get_global_id(0);  // First dimension
-        int elementIdx = get_global_id(1); // Second dimension
-        int structIdx = get_global_id(2);  // Third dimension
-
-        // Calculate the flat index for the minMaxBuffer and seriesBuffer
-        int minMaxIndex = vectorIdx;
-        int dataIndex = structIdx * 256 + elementIdx;
-
-        // Retrieve min and max values
-        float min = minMaxBuffer[minMaxIndex];
-        float max = minMaxBuffer[minMaxIndex + 1];
-
-        // Retrieve the series value
-        float value = seriesBuffer[dataIndex];
-
-        if ( value!=0 && min!=0 && max!=0){
-            // Compute scaled value
-            float scaledValue = (2 * value - max - min) / (max - min);
-
-            // Correct the value within [-1, 1]
-            if (scaledValue > 1.0f) scaledValue = 1.0f;
-            else if (scaledValue < -1.0f) scaledValue = -1.0f;
-
-            // Compute the arccos
-            float phi = acos(scaledValue);
-
-            // Write back the result
-            outputBuffer[dataIndex] = phi;
-        }
-    }
-    )";
-
-
-    const char *gaf = R"(
-    __kernel void computeGAF(__global const float *inputBuffer, __global float *gafBuffer) {
-        int seriesIdx = get_global_id(0);     // Index of the series within each struct
-        int elementIdx = get_global_id(1);    // Current element index, used as row index in GAF matrix
-        int structIdx = get_global_id(2);     // Index of the struct
-        int seriesLength=256;            // Number of elements per series
-        int numSeriesPerStruct=20;       // Number of series per struct
-        // Calculate the base index in the input buffer for the current struct and series
-        int baseIndex = (structIdx * numSeriesPerStruct + seriesIdx) * seriesLength;
-        float phi1 = inputBuffer[baseIndex + elementIdx];
-        // Iterate over each element to compute GAF values with every other element
-        for (int j = 0; j < seriesLength; j++) {
-            float phi2 = inputBuffer[baseIndex + j];
-
-            // Compute the GAF value
-            float gafValue = cos(phi1 + phi2);
-
-            // Write back the result to the GAF matrix
-            int gafIndex = baseIndex * seriesLength + elementIdx * seriesLength + j;
-            gafBuffer[gafIndex] = gafValue;
-            }
-        }
-    )";
-
-
-    // Build kernel
-    size_t sourceSize = strlen(ajusteypolar);
-    //error handling
-    if (sourceSize == 0) {
-        std::cerr << "Failed to read kernel source" << std::endl;
-    }
-    size_t sourceSize2 = strlen(gaf);
-    //error handling
-    if (sourceSize2 == 0) {
-        std::cerr << "Failed to read kernel source" << std::endl;
-    }
-    cl_program program = clCreateProgramWithSource(context, 1, &ajusteypolar, &sourceSize, &err); 
-    //error handling
-    if (err != CL_SUCCESS) {
-        std::cerr << "Failed to create program with source. Error Code: " << err << std::endl;
-    }
-
-    cl_program program2 = clCreateProgramWithSource(context, 1, &gaf, &sourceSize2, &err);
-    //error handling
-    if (err != CL_SUCCESS) {
-        std::cerr << "Failed to create program with source. Error Code: " << err << std::endl;
-    }
-    // Build the program
-    err = clBuildProgram(program, 1, &device, nullptr, nullptr, nullptr); 
-    //error handling    
-    if (err != CL_SUCCESS) {
-        std::cerr << "Failed to build program ajusteypolar. Error Code: " << err << std::endl;
-    }
-    err = clBuildProgram(program2, 1, &device, nullptr, nullptr, nullptr);
-    //error handling
-    if (err != CL_SUCCESS) {        
-        std::cerr << "Failed to build program gaf. Error Code: " << err << std::endl;
-        //print the log
-        size_t logSize;
-        clGetProgramBuildInfo(program2, device, CL_PROGRAM_BUILD_LOG, 0, nullptr, &logSize);
-        char* log = new char[logSize];
-        clGetProgramBuildInfo(program2, device, CL_PROGRAM_BUILD_LOG, logSize, log, nullptr);
-        std::cerr << log << std::endl;
-        delete[] log;
-
-
-    }
-    // Create the kernel
-    cl_kernel kernel = clCreateKernel(program, "computeArccos", &err); 
-    //error handling
-    if (err != CL_SUCCESS) {
-        std::cerr << "Failed to create kernel computeArccos. Error Code: " << err << std::endl;
-    }
-    cl_kernel kernel2 = clCreateKernel(program2, "computeGAF", &err);
-    //error handling
-    if (err != CL_SUCCESS) {
-        std::cerr << "Failed to create kernel Gaf. Error Code: " << err << std::endl;
-    }
-    
-    size_t globalSize[] = {100, 256, numStructs}; // [vectors, elements per vector, structs]
-    size_t localSize[] = {1, 256, 1}; // Ensure the local size is within the device's capabilities
 
     
 
     int patience = 0;
     int totalsubmitted = 0;
     int buffer=0;
+    int numStructs = 20; // Assuming a value for numStructs
+    int numVectors = 10; // Assuming a value for numVectors
+    int vectorLength = 256; // Assuming a value for vectorLength
     Series series;
-    CLSeries seriesBuffer[numStructs];
-    CLminmax seriesminmax[numStructs];
     //queue not empty
     while (true){
         //if the queue is empty sleep for a little bit
         if (seriesQueue.Size()<=0){
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             patience++;
-            if (patience > 1000){
+            if (patience > 500){
                 std::cout << "THATS IT, I HAVE NO MORE PATIENCE" << std::endl;
                 break;
             }
             continue;
         }
         int key;
+       
+        
+
         if (buffer == numStructs-1){ //if the buffer is full, submit the buffer to the gpu
             // std::cout << "Buffer: " << buffer << std::endl;
             // Calculate the size of the buffer to be written
-            size_t dataSize = sizeof(seriesBuffer);
-            size_t minMaxSize = sizeof(seriesminmax);
-            
-
-            // Assuming clBuffer is already created with sufficient size (dataSize)
-            cl_int err = clEnqueueWriteBuffer(queue, inputBuffer, CL_TRUE, 0, dataSize, seriesBuffer, 0, nullptr, nullptr);
-            // Error handling
-            if (err != CL_SUCCESS) {
-                std::cerr << "Failed to write buffer. Error Code: " << err << std::endl;
-            }
-            clFinish(queue);
-            cl_int err2 = clEnqueueWriteBuffer(queue, minMaxBuffer, CL_TRUE, 0, minMaxSize, seriesminmax, 0, nullptr, nullptr);
-            // Error handling
-            if (err2 != CL_SUCCESS) {
-                std::cerr << "Failed to write buffer. Error Code: " << err2 << std::endl;
-            }
-            //wait for both buffers to be queued up 
-            clFinish(queue);
-            totalsubmitted += 1;
-            std::cout << "Total submitted: " << totalsubmitted << std::endl;
-            // Submit the buffer to the GPU
-            std::cout << "Submitting buffer to GPU" << std::endl;
-            // use a clSetKernelArg(kernel, arg_index, arg_size, arg_value);
-            
-            std::cout << "dimensions set" << std::endl;
-
-            // Execute kernelg
-            // Set kernel arguments
-            err = clSetKernelArg(kernel, 0, sizeof(cl_mem), &minMaxBuffer);
-            clFinish(queue);
-            std::cout << "set minmaxbuffer argument" << std::endl;
-            //error handlingif (err != CL_SUCCESS) {
-            //     std::cerr << "Failed to set kernel argument. Error Code: " << err << std::endl;
-            // }
-            // 
-
-            err = clSetKernelArg(kernel, 1, sizeof(cl_mem), &inputBuffer);
-            clFinish(queue);
-            if (err != CL_SUCCESS) {
-                std::cerr << "Failed to set kernel argument. Error Code: " << err << std::endl;
-            }
-
-
-            err = clSetKernelArg(kernel, 2, sizeof(cl_mem), &outputBuffer);
-            clFinish(queue);
-            if (err != CL_SUCCESS) {
-                std::cerr << "Failed to set kernel argument. Error Code: " << err << std::endl;
-            }
-            // arguments set, enque kernel
-            err = clEnqueueNDRangeKernel(queue, kernel, 3, nullptr, globalSize , localSize, 0, nullptr, nullptr);
-            std::cout << "enqueued kernel" << std::endl;
-            //error handling
-            if (err != CL_SUCCESS) {
-                std::cerr << "Failed to enqueue kernel. Error Code: " << err << std::endl;
-            } 
-
-            // Wait for completion
-            err = clFinish(queue); 
-            //error handling
-            if (err != CL_SUCCESS) {
-                std::cerr << "Failed to finish queue. Error Code: " << err << std::endl;
-            }
-            std::cout << "finished queue" << std::endl;
-            // Ready for second kernel execution
-            // Set kernel arguments
-            err = clSetKernelArg(kernel2, 0, sizeof(cl_mem), &outputBuffer);
-            if (err != CL_SUCCESS) {
-                std::cerr << "Failed to set kernel argument. Error Code: " << err << std::endl;
-            }
-            err = clSetKernelArg(kernel2, 1, sizeof(cl_mem), &gafBuffer);
-            if (err != CL_SUCCESS) {
-                std::cerr << "Failed to set kernel argument. Error Code: " << err << std::endl;
-            }
-            // Execute kernel
-            err = clEnqueueNDRangeKernel(queue, kernel2, 3, nullptr, globalSize, localSize, 0, nullptr, nullptr);
-            if (err != CL_SUCCESS) {
-                std::cerr << "Failed to enqueue kernel. Error Code: " << err << std::endl;
-            }
-            // Wait for completion
-            err = clFinish(queue);
-            if (err != CL_SUCCESS) {
-                std::cerr << "Failed to finish queue. Error Code: " << err << std::endl;
-            }
-            // Read the buffer
-            float gaf[numVectors][vectorLength][vectorLength];
-            err = clEnqueueReadBuffer(queue, gafBuffer, CL_TRUE, 0, gafBufferSize, gaf, 0, nullptr, nullptr);
-            if (err != CL_SUCCESS) {
-                std::cerr << "Failed to read buffer. Error Code: " << err << std::endl;
-            }
+             
             //print on screen a message that the buffer has been read and the gaf matrix has been calculated
-            std::cout << "Buffer read, GAF matrix calculated" << std::endl;
+            // std::cout << "Buffer read, GAF matrix calculated" << std::endl;
             //print buffer contents to file, one file per series per struct
             for (int i = 0; i < numStructs; ++i) {
                 std::ofstream file;
@@ -572,7 +337,7 @@ void thGPUIO(){
                 file.open(filename);
                 for (int j = 0; j < numVectors; ++j) {
                     for (int k = 0; k < vectorLength; ++k) {
-                        file << seriesBuffer[i].dataPoints[k][j] << " ";
+                        
                     }
                     file << std::endl;
                 }
@@ -581,45 +346,6 @@ void thGPUIO(){
             //
             buffer = 0;
         }
-        if (!seriesQueue.ConsumeSync(key)){
-            std::cerr << "Failed to consume key from seriesQueue" << std::endl;
-            continue;
-        }
-        //get the series from the hashmap
-        if(!seriesMap.find(key, series)){
-            std::cerr << "Failed to find series in seriesMap" << std::endl;
-            continue;
-        } 
-        // copy the array of datapoints to the seriesBuffer
-        for (int i = 0; i < SERIES_SIZE; ++i) {
-                seriesBuffer[buffer].dataPoints[i][0] = series.dataPoints[i].aggregate;
-                seriesBuffer[buffer].dataPoints[i][1] = series.dataPoints[i].appliance1;
-                seriesBuffer[buffer].dataPoints[i][2] = series.dataPoints[i].appliance2;
-                seriesBuffer[buffer].dataPoints[i][3] = series.dataPoints[i].appliance3;
-                seriesBuffer[buffer].dataPoints[i][4] = series.dataPoints[i].appliance4;
-                seriesBuffer[buffer].dataPoints[i][5] = series.dataPoints[i].appliance5;
-                seriesBuffer[buffer].dataPoints[i][6] = series.dataPoints[i].appliance6;
-                seriesBuffer[buffer].dataPoints[i][7] = series.dataPoints[i].appliance7;
-                seriesBuffer[buffer].dataPoints[i][8] = series.dataPoints[i].appliance8;
-                seriesBuffer[buffer].dataPoints[i][9] = series.dataPoints[i].appliance9;
-        }
-        //copy the min and max values to the seriesminmax
-        for (int i = 0; i < 10; ++i) {
-            seriesminmax[buffer].value[i] = series.min[i];
-            seriesminmax[buffer].value[i] = series.max[i];
-        }
-        buffer++;
-    }
-    std::cout << "Total submitted: " << totalsubmitted << std::endl;
-    // Clean up
-    clReleaseMemObject(inputBuffer);
-    clReleaseMemObject(minMaxBuffer);
-    clReleaseMemObject(outputBuffer);
-    clReleaseKernel(kernel);
-    clReleaseProgram(program);
-    clReleaseCommandQueue(queue);
-    clReleaseContext(context);
-    
 }
 
 void inserter(MYSQL* conn){}   
