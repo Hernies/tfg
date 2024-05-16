@@ -317,17 +317,19 @@ void thGPUIO(){
     // Create a command queue
     queue = clCreateCommandQueueWithProperties(context, device, nullptr, &err); 
 
-    const int numStructs = 20;
+    const int numStructs = 10;
     const int vectorLength = 256;
     const int numVectors = 10;
     // Allocate buffers
     size_t inputBufferSize = numVectors * vectorLength * numStructs * sizeof(float);
     size_t minMaxBufferSize = numVectors * vectorLength * numStructs * sizeof(float);
     size_t outputBufferSize = numVectors * vectorLength * numStructs * sizeof(float);
+    size_t gafBufferSize = numVectors * vectorLength * vectorLength * numStructs * sizeof(float);
 
     cl_mem inputBuffer = clCreateBuffer(context, CL_MEM_READ_ONLY, inputBufferSize, nullptr, &err); 
     cl_mem minMaxBuffer = clCreateBuffer(context, CL_MEM_WRITE_ONLY, minMaxBufferSize, nullptr, &err); 
     cl_mem outputBuffer = clCreateBuffer(context, CL_MEM_WRITE_ONLY, outputBufferSize, nullptr, &err);
+    cl_mem gafBuffer = clCreateBuffer(context, CL_MEM_WRITE_ONLY, gafBufferSize, nullptr, &err);
 
    const char *ajusteypolar = R"(
     __kernel void computeArccos(__global const float *minMaxBuffer, __global float *seriesBuffer, __global float *outputBuffer) {
@@ -366,10 +368,40 @@ void thGPUIO(){
     )";
 
 
+    const char *gaf = R"(
+    __kernel void computeGAF(__global const float *inputBuffer, __global float *gafBuffer) {
+        int seriesIdx = get_global_id(0);     // Index of the series within each struct
+        int elementIdx = get_global_id(1);    // Current element index, used as row index in GAF matrix
+        int structIdx = get_global_id(2);     // Index of the struct
+        int seriesLength=256;            // Number of elements per series
+        int numSeriesPerStruct=20;       // Number of series per struct
+        // Calculate the base index in the input buffer for the current struct and series
+        int baseIndex = (structIdx * numSeriesPerStruct + seriesIdx) * seriesLength;
+        float phi1 = inputBuffer[baseIndex + elementIdx];
+        // Iterate over each element to compute GAF values with every other element
+        for (int j = 0; j < seriesLength; j++) {
+            float phi2 = inputBuffer[baseIndex + j];
+
+            // Compute the GAF value
+            float gafValue = cos(phi1 + phi2);
+
+            // Write back the result to the GAF matrix
+            int gafIndex = baseIndex * seriesLength + elementIdx * seriesLength + j;
+            gafBuffer[gafIndex] = gafValue;
+            }
+        }
+    )";
+
+
     // Build kernel
     size_t sourceSize = strlen(ajusteypolar);
     //error handling
     if (sourceSize == 0) {
+        std::cerr << "Failed to read kernel source" << std::endl;
+    }
+    size_t sourceSize2 = strlen(gaf);
+    //error handling
+    if (sourceSize2 == 0) {
         std::cerr << "Failed to read kernel source" << std::endl;
     }
     cl_program program = clCreateProgramWithSource(context, 1, &ajusteypolar, &sourceSize, &err); 
@@ -377,15 +409,42 @@ void thGPUIO(){
     if (err != CL_SUCCESS) {
         std::cerr << "Failed to create program with source. Error Code: " << err << std::endl;
     }
+
+    cl_program program2 = clCreateProgramWithSource(context, 1, &gaf, &sourceSize2, &err);
+    //error handling
+    if (err != CL_SUCCESS) {
+        std::cerr << "Failed to create program with source. Error Code: " << err << std::endl;
+    }
+    // Build the program
     err = clBuildProgram(program, 1, &device, nullptr, nullptr, nullptr); 
     //error handling    
     if (err != CL_SUCCESS) {
-        std::cerr << "Failed to build program. Error Code: " << err << std::endl;
+        std::cerr << "Failed to build program ajusteypolar. Error Code: " << err << std::endl;
     }
+    err = clBuildProgram(program2, 1, &device, nullptr, nullptr, nullptr);
+    //error handling
+    if (err != CL_SUCCESS) {        
+        std::cerr << "Failed to build program gaf. Error Code: " << err << std::endl;
+        //print the log
+        size_t logSize;
+        clGetProgramBuildInfo(program2, device, CL_PROGRAM_BUILD_LOG, 0, nullptr, &logSize);
+        char* log = new char[logSize];
+        clGetProgramBuildInfo(program2, device, CL_PROGRAM_BUILD_LOG, logSize, log, nullptr);
+        std::cerr << log << std::endl;
+        delete[] log;
+
+
+    }
+    // Create the kernel
     cl_kernel kernel = clCreateKernel(program, "computeArccos", &err); 
     //error handling
     if (err != CL_SUCCESS) {
-        std::cerr << "Failed to create kernel. Error Code: " << err << std::endl;
+        std::cerr << "Failed to create kernel computeArccos. Error Code: " << err << std::endl;
+    }
+    cl_kernel kernel2 = clCreateKernel(program2, "computeGAF", &err);
+    //error handling
+    if (err != CL_SUCCESS) {
+        std::cerr << "Failed to create kernel Gaf. Error Code: " << err << std::endl;
     }
     
     size_t globalSize[] = {100, 256, numStructs}; // [vectors, elements per vector, structs]
@@ -463,7 +522,7 @@ void thGPUIO(){
             if (err != CL_SUCCESS) {
                 std::cerr << "Failed to set kernel argument. Error Code: " << err << std::endl;
             }
-
+            // arguments set, enque kernel
             err = clEnqueueNDRangeKernel(queue, kernel, 3, nullptr, globalSize , localSize, 0, nullptr, nullptr);
             std::cout << "enqueued kernel" << std::endl;
             //error handling
@@ -478,21 +537,46 @@ void thGPUIO(){
                 std::cerr << "Failed to finish queue. Error Code: " << err << std::endl;
             }
             std::cout << "finished queue" << std::endl;
-            // Read data back to host
-             err = clEnqueueReadBuffer(queue, outputBuffer, CL_TRUE, 0, dataSize, seriesBuffer, 0, nullptr, nullptr);
-            clFinish(queue);
-            // // Error handling   
+            // Ready for second kernel execution
+            // Set kernel arguments
+            err = clSetKernelArg(kernel2, 0, sizeof(cl_mem), &outputBuffer);
+            if (err != CL_SUCCESS) {
+                std::cerr << "Failed to set kernel argument. Error Code: " << err << std::endl;
+            }
+            err = clSetKernelArg(kernel2, 1, sizeof(cl_mem), &gafBuffer);
+            if (err != CL_SUCCESS) {
+                std::cerr << "Failed to set kernel argument. Error Code: " << err << std::endl;
+            }
+            // Execute kernel
+            err = clEnqueueNDRangeKernel(queue, kernel2, 3, nullptr, globalSize, localSize, 0, nullptr, nullptr);
+            if (err != CL_SUCCESS) {
+                std::cerr << "Failed to enqueue kernel. Error Code: " << err << std::endl;
+            }
+            // Wait for completion
+            err = clFinish(queue);
+            if (err != CL_SUCCESS) {
+                std::cerr << "Failed to finish queue. Error Code: " << err << std::endl;
+            }
+            // Read the buffer
+            float gaf[numVectors][vectorLength][vectorLength];
+            err = clEnqueueReadBuffer(queue, gafBuffer, CL_TRUE, 0, gafBufferSize, gaf, 0, nullptr, nullptr);
             if (err != CL_SUCCESS) {
                 std::cerr << "Failed to read buffer. Error Code: " << err << std::endl;
             }
-            // print inputbuffer
+            //print on screen a message that the buffer has been read and the gaf matrix has been calculated
+            std::cout << "Buffer read, GAF matrix calculated" << std::endl;
+            //print buffer contents to file, one file per series per struct
             for (int i = 0; i < numStructs; ++i) {
-                for (int j = 0; j < 256; ++j) {
-                    for (int k = 0; k < 10; ++k) {
-                        std::cout << seriesBuffer[i].dataPoints[j][k] << " ";
+                std::ofstream file;
+                std::string filename = "gaf" + std::to_string(i) + ".txt";
+                file.open(filename);
+                for (int j = 0; j < numVectors; ++j) {
+                    for (int k = 0; k < vectorLength; ++k) {
+                        file << seriesBuffer[i].dataPoints[k][j] << " ";
                     }
-                    std::cout << std::endl;
+                    file << std::endl;
                 }
+                file.close();
             }
             //
             buffer = 0;
@@ -527,6 +611,15 @@ void thGPUIO(){
         buffer++;
     }
     std::cout << "Total submitted: " << totalsubmitted << std::endl;
+    // Clean up
+    clReleaseMemObject(inputBuffer);
+    clReleaseMemObject(minMaxBuffer);
+    clReleaseMemObject(outputBuffer);
+    clReleaseKernel(kernel);
+    clReleaseProgram(program);
+    clReleaseCommandQueue(queue);
+    clReleaseContext(context);
+    
 }
 
 void inserter(MYSQL* conn){}   
