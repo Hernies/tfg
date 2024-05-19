@@ -55,7 +55,13 @@
         "condition_variable": "cpp",
         "mutex": "cpp",
         "shared_mutex": "cpp",
-        "future": "cpp"
+        "future": "cpp",
+        "bitset": "cpp",
+        "complex": "cpp",
+        "set": "cpp",
+        "iomanip": "cpp",
+        "typeindex": "cpp",
+        "variant": "cpp"
     },
     "OpenCL.server.deviceID": 2208067589,
     "OpenCL.explorer.localizedProperties": true

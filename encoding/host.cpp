@@ -1,7 +1,6 @@
-#include <CL/cl2.hpp>
-#include <iostream>
 #include <sstream>
 #include <fstream>
+#include <iostream>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -11,6 +10,7 @@
 #include <future>
 #include <string>
 #include <cstring>
+#include <math.h>
 #include <algorithm>
 extern "C" {
 #include <mysql/mysql.h>
@@ -18,6 +18,7 @@ extern "C" {
 #include "thSafe/HashMap.h"
 #include "thSafe/SafeQueue.hpp"
 #include "eventloop/EventLoop.h"
+#include <opencv2/opencv.hpp>
 using namespace std;
 
 
@@ -65,10 +66,35 @@ struct Series {
     int max[10];
 };
 
+struct SeriesMinMax {
+    int min[10];
+    int max[10];
+};
+
+// give me a matrix struct using vectors of vectors
+struct Matrix {
+    std::vector<std::vector<float>> matrix;
+};
+
 
 //Thread safe data structures
 CTSL::HashMap <int, Series> seriesMap;
 SafeQueue<int> seriesQueue;
+
+
+ float scale_and_adjust(int value, int min, int max) {
+    //return the scaled value of the series, only if it is inside the range [-1,1]
+    //as an extra step, computes the acos of the value after it is scaled and adjusted
+     float scaled;
+    if (max == min) {
+        scaled = 0;
+    } else {
+        scaled = (2.0f * value - (max + min)) / (max - min);
+    }
+    std::cout << "Scaled: " << scaled << std::endl;
+    return (scaled > 1.0f) ? acosf(1.0f) : (scaled < -1.0f) ? acosf(-1.0f) : acosf(scaled);
+}
+
 
 // the following functions are used to submit async tasks to the eventloop thread with the mysql library (currenty not fully implemented)
 
@@ -143,7 +169,7 @@ void getResults(MYSQL* conn, MYSQL_RES** results) {
     // fixme results falls out of scope after lamda finishes
     // Since 'results' is captured by reference, there's no need to use '&results' in the function call.
     auto asyncFunc = [conn, &results]() {
-        mysql_store_result_nonblocking(conn, results);
+        mysql_store_result_nonblocking(conn, results);  
     };
 
     auto condition = [&resultsPromise, conn, &results]() -> bool {
@@ -182,7 +208,17 @@ void extractor (MYSQL* connObject, int house, int batchSize, int times) {
     conn = getConn(connObject);
     if (conn == nullptr) {
         std::cerr << "Failed to connect to database" << std::endl;
-        return;
+        return;auto apply_colormap = [](float value) -> cv::Vec3b {
+    // Normalize value from [-1, 1] to [0, 1]
+    float normalized_value = (value + 1) / 2.0f;
+
+    // Apply a simple rainbow colormap for demonstration
+    float r = std::max(0.0f, 1.0f - std::fabs(2.0f * normalized_value - 1.0f));
+    float g = 1.0f - std::fabs(2.0f * normalized_value - 1.0f);
+    float b = std::max(0.0f, std::fabs(2.0f * normalized_value - 1.0f));
+
+    return cv::Vec3b(static_cast<uchar>(b * 255), static_cast<uchar>(g * 255), static_cast<uchar>(r * 255));
+};
     }
 
     for (int i = 0; i < times; ++i) {
@@ -294,58 +330,135 @@ void extractor (MYSQL* connObject, int house, int batchSize, int times) {
     }
 }
 
+auto apply_colormap = [](float value) -> cv::Vec3b {
+    // Apply a simple rainbow colormap for demonstration
+    float r = std::max(0.0f, 1.0f - std::fabs(2.0f * value - 1.0f));
+    float g = 1.0f - std::fabs(2.0f * value - 1.0f);
+    float b = std::max(0.0f, std::fabs(2.0f * value - 1.0f));
 
+    return cv::Vec3b(static_cast<uchar>(b * 255), static_cast<uchar>(g * 255), static_cast<uchar>(r * 255));
+};
 
-void thGPUIO(){
-    
-
-    
-
+void thGAF() {
     int patience = 0;
     int totalsubmitted = 0;
-    int buffer=0;
-    int numStructs = 20; // Assuming a value for numStructs
+    int buffer = 0;
+    int numStructs = 2; // Assuming a value for numStructs
     int numVectors = 10; // Assuming a value for numVectors
-    int vectorLength = 256; // Assuming a value for vectorLength
+    int vectorLength = SERIES_SIZE; // Using SERIES_SIZE as vector length
     Series series;
-    //queue not empty
-    while (true){
-        //if the queue is empty sleep for a little bit
-        if (seriesQueue.Size()<=0){
+    Series seriesBuffer[numStructs];
+    int keyvalues[numStructs];
+
+
+    // Queue not empty
+    while (true) {
+        int key;
+        // If the queue is empty, sleep for a little bit
+        if (seriesQueue.Size() <= 0) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             patience++;
-            if (patience > 500){
-                std::cout << "THATS IT, I HAVE NO MORE PATIENCE" << std::endl;
+            if (patience > 500) {
+                std::cout << "THAT'S IT, I HAVE NO MORE PATIENCE" << std::endl;
                 break;
             }
             continue;
         }
-        int key;
-       
-        
 
-        if (buffer == numStructs-1){ //if the buffer is full, submit the buffer to the gpu
-            // std::cout << "Buffer: " << buffer << std::endl;
-            // Calculate the size of the buffer to be written
-             
-            //print on screen a message that the buffer has been read and the gaf matrix has been calculated
-            // std::cout << "Buffer read, GAF matrix calculated" << std::endl;
-            //print buffer contents to file, one file per series per struct
+        if (buffer == numStructs) { // If the buffer is full, submit the buffer to the GPU
+            // Write the buffer to a file, implementing the GAF encoding.
             for (int i = 0; i < numStructs; ++i) {
-                std::ofstream file;
-                std::string filename = "gaf" + std::to_string(i) + ".txt";
-                file.open(filename);
+                
+                std::ofstream file[numVectors];
                 for (int j = 0; j < numVectors; ++j) {
+                    //open file with name gaf+ the key value of the series
+
+                    float scaledAggregate[vectorLength];
+                    float scaledAppliance1[vectorLength];
+                    float scaledAppliance2[vectorLength];
+                    float scaledAppliance3[vectorLength];
+                    float scaledAppliance4[vectorLength];
+                    float scaledAppliance5[vectorLength];
+                    float scaledAppliance6[vectorLength];
+                    float scaledAppliance7[vectorLength];
+                    float scaledAppliance8[vectorLength];
+                    float scaledAppliance9[vectorLength];
+
+
+
                     for (int k = 0; k < vectorLength; ++k) {
-                        
+                        // Scale the series to the range [0,1] using the min and max values of the series
+                        scaledAggregate[k] = scale_and_adjust(seriesBuffer[i].dataPoints[k].aggregate, seriesBuffer->min[0], seriesBuffer->max[0]);
+                        scaledAppliance1[k] = scale_and_adjust(seriesBuffer[i].dataPoints[k].appliance1, seriesBuffer->min[1], seriesBuffer->max[1]);
+                        scaledAppliance2[k] = scale_and_adjust(seriesBuffer[i].dataPoints[k].appliance2, seriesBuffer->min[2], seriesBuffer->max[2]);
+                        scaledAppliance3[k] = scale_and_adjust(seriesBuffer[i].dataPoints[k].appliance3, seriesBuffer->min[3], seriesBuffer->max[3]);
+                        scaledAppliance4[k] = scale_and_adjust(seriesBuffer[i].dataPoints[k].appliance4, seriesBuffer->min[4], seriesBuffer->max[4]);
+                        scaledAppliance5[k] = scale_and_adjust(seriesBuffer[i].dataPoints[k].appliance5, seriesBuffer->min[5], seriesBuffer->max[5]);
+                        scaledAppliance6[k] = scale_and_adjust(seriesBuffer[i].dataPoints[k].appliance6, seriesBuffer->min[6], seriesBuffer->max[6]);
+                        scaledAppliance7[k] = scale_and_adjust(seriesBuffer[i].dataPoints[k].appliance7, seriesBuffer->min[7], seriesBuffer->max[7]);
+                        scaledAppliance8[k] = scale_and_adjust(seriesBuffer[i].dataPoints[k].appliance8, seriesBuffer->min[8], seriesBuffer->max[8]);
+                        scaledAppliance9[k] = scale_and_adjust(seriesBuffer[i].dataPoints[k].appliance9, seriesBuffer->min[9], seriesBuffer->max[9]);
                     }
-                    file << std::endl;
+                    cv::Mat gafImage(vectorLength, vectorLength, CV_32F);
+                    //open gaf text file
+
+                    for (int k = 0; k < vectorLength; ++k) {
+                        for (int l = 0; l < vectorLength; ++l) {
+                            // Calculate the GAF encoding for the series
+                            // Assuming gaf_encoding is a function that encodes based on k and l. the encoding is cos of the sum of the scaled values at positions k and l
+                            float gafAggregate = cos(scaledAggregate[k] + scaledAggregate[l]);
+                            float gafAppliance1 = cos(scaledAppliance1[k] + scaledAppliance1[l]);
+                            float gafAppliance2 = cos(scaledAppliance2[k] + scaledAppliance2[l]);
+                            float gafAppliance3 = cos(scaledAppliance3[k] + scaledAppliance3[l]);
+                            float gafAppliance4 = cos(scaledAppliance4[k] + scaledAppliance4[l]);
+                            float gafAppliance5 = cos(scaledAppliance5[k] + scaledAppliance5[l]);
+                            float gafAppliance6 = cos(scaledAppliance6[k] + scaledAppliance6[l]);
+                            float gafAppliance7 = cos(scaledAppliance7[k] + scaledAppliance7[l]);
+                            float gafAppliance8 = cos(scaledAppliance8[k] + scaledAppliance8[l]);
+                            float gafAppliance9 = cos(scaledAppliance9[k] + scaledAppliance9[l]);
+                            // For simplicity, we'll just use gafAggregate in the image
+                            gafImage.at<float>(k, l) = gafAggregate;
+                            //copy the values to a txt file as well
+                           
+
+                        }
+                    }
+
+                    // Normalize the GAF image to [0, 1]
+                    cv::normalize(gafImage, gafImage, 0, 1, cv::NORM_MINMAX);
+
+                    // Create a color image
+                    cv::Mat colorImage(vectorLength, vectorLength, CV_8UC3);
+                    for (int k = 0; k < vectorLength; ++k) {
+                        for (int l = 0; l < vectorLength; ++l) {
+                            colorImage.at<cv::Vec3b>(k, l) = apply_colormap(gafImage.at<float>(k, l));
+                        }
+                    }
+
+                    std::string filename = "gaf" + std::to_string(keyvalues[i]) + ".png";
+                    cv::imwrite(filename, colorImage);
                 }
-                file.close();
             }
-            //
             buffer = 0;
         }
+
+        if (!seriesQueue.ConsumeSync(key)) {
+            std::cerr << "Failed to consume key from seriesQueue" << std::endl;
+            continue;
+        }
+
+        // Get the series from the hashmap
+        if (!seriesMap.find(key, series)) {
+            std::cerr << "Failed to find series in seriesMap" << std::endl;
+            continue;
+        }
+
+        // Store the series in the buffer
+        keyvalues[buffer] = key;
+        seriesBuffer[buffer] = series;
+
+        buffer++;
+    }
 }
 
 void inserter(MYSQL* conn){}   
@@ -370,6 +483,7 @@ void setDBCache() {
     }
     execQuery(conn, "SET GLOBAL innodb_buffer_pool_size = 8 * 1024 * 1024 * 1024;");
 }
+
 int main(int argc, char* argv[]) {
     //the arguments for this program are: the house name, the batch size, and the number of threads. 
     //The series size is specified by the define
@@ -406,18 +520,20 @@ int buffer=0;
         }
         extractors[i] = std::thread(extractor, conn, house, threadBatchSize, times);
     }
-    // initiate the gpuio thread
-    std::thread gpuio(thGPUIO);
+    // initiate the GAF thread
+    std::cout << "Starting GAF thread" << std::endl;
+    std::thread gaf(thGAF);
+
     
     //join the threads  
 
     for (auto &th : extractors) {
         th.join();
     }
-    gpuio.join();
+    gaf.join();
 
     //print the contents of the seriesMap and the seriesQueue
-    // std::cout << "SeriesQuestd::thread gpuio(thGPUIO);ue size: " << seriesQueue.Size() << std::endl;
+    // std::cout << "SeriesQuestd::thread gaf(thGAF);ue size: " << seriesQueue.Size() << std::endl;
     
     //delete hashmaps    
     seriesMap.clear();
