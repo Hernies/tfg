@@ -80,6 +80,7 @@ struct Matrix {
 //Thread safe data structures
 CTSL::HashMap <int, Series> seriesMap;
 SafeQueue<int> seriesQueue;
+SafeQueue<int> gafQueue;
 
 
  float scale_and_adjust(int value, int min, int max) {
@@ -91,7 +92,6 @@ SafeQueue<int> seriesQueue;
     } else {
         scaled = (2.0f * value - (max + min)) / (max - min);
     }
-    std::cout << "Scaled: " << scaled << std::endl;
     return (scaled > 1.0f) ? acosf(1.0f) : (scaled < -1.0f) ? acosf(-1.0f) : acosf(scaled);
 }
 
@@ -208,17 +208,7 @@ void extractor (MYSQL* connObject, int house, int batchSize, int times) {
     conn = getConn(connObject);
     if (conn == nullptr) {
         std::cerr << "Failed to connect to database" << std::endl;
-        return;auto apply_colormap = [](float value) -> cv::Vec3b {
-    // Normalize value from [-1, 1] to [0, 1]
-    float normalized_value = (value + 1) / 2.0f;
-
-    // Apply a simple rainbow colormap for demonstration
-    float r = std::max(0.0f, 1.0f - std::fabs(2.0f * normalized_value - 1.0f));
-    float g = 1.0f - std::fabs(2.0f * normalized_value - 1.0f);
-    float b = std::max(0.0f, std::fabs(2.0f * normalized_value - 1.0f));
-
-    return cv::Vec3b(static_cast<uchar>(b * 255), static_cast<uchar>(g * 255), static_cast<uchar>(r * 255));
-};
+        return;
     }
 
     for (int i = 0; i < times; ++i) {
@@ -341,9 +331,8 @@ auto apply_colormap = [](float value) -> cv::Vec3b {
 
 void thGAF() {
     int patience = 0;
-    int totalsubmitted = 0;
     int buffer = 0;
-    int numStructs = 2; // Assuming a value for numStructs
+    int numStructs = 20; // Assuming a value for numStructs
     int numVectors = 10; // Assuming a value for numVectors
     int vectorLength = SERIES_SIZE; // Using SERIES_SIZE as vector length
     Series series;
@@ -365,7 +354,7 @@ void thGAF() {
             continue;
         }
 
-        if (buffer == numStructs) { // If the buffer is full, submit the buffer to the GPU
+        if (buffer == numStructs) { // If the buffer is full, process the buffer
             // Write the buffer to a file, implementing the GAF encoding.
             for (int i = 0; i < numStructs; ++i) {
                 
@@ -400,6 +389,16 @@ void thGAF() {
                         scaledAppliance9[k] = scale_and_adjust(seriesBuffer[i].dataPoints[k].appliance9, seriesBuffer->min[9], seriesBuffer->max[9]);
                     }
                     cv::Mat gafImage(vectorLength, vectorLength, CV_32F);
+                    cv::Mat gafImageAp1(vectorLength, vectorLength, CV_32F);
+                    cv::Mat gafImageAp2(vectorLength, vectorLength, CV_32F);
+                    cv::Mat gafImageAp3(vectorLength, vectorLength, CV_32F);
+                    cv::Mat gafImageAp4(vectorLength, vectorLength, CV_32F);
+                    cv::Mat gafImageAp5(vectorLength, vectorLength, CV_32F);
+                    cv::Mat gafImageAp6(vectorLength, vectorLength, CV_32F);
+                    cv::Mat gafImageAp7(vectorLength, vectorLength, CV_32F);
+                    cv::Mat gafImageAp8(vectorLength, vectorLength, CV_32F);
+                    cv::Mat gafImageAp9(vectorLength, vectorLength, CV_32F);
+
                     //open gaf text file
 
                     for (int k = 0; k < vectorLength; ++k) {
@@ -416,27 +415,73 @@ void thGAF() {
                             float gafAppliance7 = cos(scaledAppliance7[k] + scaledAppliance7[l]);
                             float gafAppliance8 = cos(scaledAppliance8[k] + scaledAppliance8[l]);
                             float gafAppliance9 = cos(scaledAppliance9[k] + scaledAppliance9[l]);
-                            // For simplicity, we'll just use gafAggregate in the image
+                            
+                            // all images
                             gafImage.at<float>(k, l) = gafAggregate;
-                            //copy the values to a txt file as well
-                           
-
+                            gafImageAp1.at<float>(k, l) = gafAppliance1;
+                            gafImageAp2.at<float>(k, l) = gafAppliance2;
+                            gafImageAp3.at<float>(k, l) = gafAppliance3;
+                            gafImageAp4.at<float>(k, l) = gafAppliance4;
+                            gafImageAp5.at<float>(k, l) = gafAppliance5;
+                            gafImageAp6.at<float>(k, l) = gafAppliance6;
+                            gafImageAp7.at<float>(k, l) = gafAppliance7;
+                            gafImageAp8.at<float>(k, l) = gafAppliance8;
+                            gafImageAp9.at<float>(k, l) = gafAppliance9;
                         }
                     }
 
                     // Normalize the GAF image to [0, 1]
-                    cv::normalize(gafImage, gafImage, 0, 1, cv::NORM_MINMAX);
-
                     // Create a color image
                     cv::Mat colorImage(vectorLength, vectorLength, CV_8UC3);
+                    cv::Mat colorImageAp1(vectorLength, vectorLength, CV_8UC3);
+                    cv::Mat colorImageAp2(vectorLength, vectorLength, CV_8UC3);
+                    cv::Mat colorImageAp3(vectorLength, vectorLength, CV_8UC3);
+                    cv::Mat colorImageAp4(vectorLength, vectorLength, CV_8UC3);
+                    cv::Mat colorImageAp5(vectorLength, vectorLength, CV_8UC3);
+                    cv::Mat colorImageAp6(vectorLength, vectorLength, CV_8UC3);
+                    cv::Mat colorImageAp7(vectorLength, vectorLength, CV_8UC3);
+                    cv::Mat colorImageAp8(vectorLength, vectorLength, CV_8UC3);
+                    cv::Mat colorImageAp9(vectorLength, vectorLength, CV_8UC3);
+
                     for (int k = 0; k < vectorLength; ++k) {
                         for (int l = 0; l < vectorLength; ++l) {
                             colorImage.at<cv::Vec3b>(k, l) = apply_colormap(gafImage.at<float>(k, l));
+                            colorImageAp1.at<cv::Vec3b>(k, l) = apply_colormap(gafImageAp1.at<float>(k, l));
+                            colorImageAp2.at<cv::Vec3b>(k, l) = apply_colormap(gafImageAp2.at<float>(k, l));
+                            colorImageAp3.at<cv::Vec3b>(k, l) = apply_colormap(gafImageAp3.at<float>(k, l));
+                            colorImageAp4.at<cv::Vec3b>(k, l) = apply_colormap(gafImageAp4.at<float>(k, l));
+                            colorImageAp5.at<cv::Vec3b>(k, l) = apply_colormap(gafImageAp5.at<float>(k, l));
+                            colorImageAp6.at<cv::Vec3b>(k, l) = apply_colormap(gafImageAp6.at<float>(k, l));
+                            colorImageAp7.at<cv::Vec3b>(k, l) = apply_colormap(gafImageAp7.at<float>(k, l));
+                            colorImageAp8.at<cv::Vec3b>(k, l) = apply_colormap(gafImageAp8.at<float>(k, l));
+                            colorImageAp9.at<cv::Vec3b>(k, l) = apply_colormap(gafImageAp9.at<float>(k, l));
                         }
                     }
 
-                    std::string filename = "gaf" + std::to_string(keyvalues[i]) + ".png";
+                    std::string filename = std::to_string(keyvalues[i]) + "_gaf" +".png";
                     cv::imwrite(filename, colorImage);
+                    std::string filenameAp1 = std::to_string(keyvalues[i]) + "_gafAp1" +".png";
+                    cv::imwrite(filenameAp1, colorImageAp1);
+                    std::string filenameAp2 = std::to_string(keyvalues[i]) + "_gafAp2" +".png";
+                    cv::imwrite(filenameAp2, colorImageAp2);
+                    std::string filenameAp3 = std::to_string(keyvalues[i]) + "_gafAp3" +".png";
+                    cv::imwrite(filenameAp3, colorImageAp3);
+                    std::string filenameAp4 = std::to_string(keyvalues[i]) + "_gafAp4" +".png";
+                    cv::imwrite(filenameAp4, colorImageAp4);
+                    std::string filenameAp5 = std::to_string(keyvalues[i]) + "_gafAp5" +".png";
+                    cv::imwrite(filenameAp5, colorImageAp5);
+                    std::string filenameAp6 = std::to_string(keyvalues[i]) + "_gafAp6" +".png";
+                    cv::imwrite(filenameAp6, colorImageAp6);
+                    std::string filenameAp7 = std::to_string(keyvalues[i]) + "_gafAp7" +".png";
+                    cv::imwrite(filenameAp7, colorImageAp7);
+                    std::string filenameAp8 = std::to_string(keyvalues[i]) + "_gafAp8" +".png";
+                    cv::imwrite(filenameAp8, colorImageAp8);
+                    std::string filenameAp9 = std::to_string(keyvalues[i]) + "_gafAp9" +".png";
+                    cv::imwrite(filenameAp9, colorImageAp9);
+
+                    //insert into the queue the key value of the series
+                    gafQueue.Produce(std::move(keyvalues[i]));
+
                 }
             }
             buffer = 0;
@@ -461,7 +506,61 @@ void thGAF() {
     }
 }
 
-void inserter(MYSQL* conn){}   
+void metadatos(){
+// connect to database
+    
+    int patience = 0;
+    int buffer = 0;
+    int numStructs = 20; // Assuming a value for numStructs
+    int numVectors = 10; // Assuming a value for numVectors
+    Series series;
+    Series seriesBuffer[numStructs];
+    int keyvalues[numStructs];
+
+    // Queue not empty
+    while (true) {
+        int key;
+        // If the queue is empty, sleep for a little bit
+        if (gafQueue.Size() <= 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            patience++;
+            
+            continue;
+        }
+
+        if (buffer == numStructs) { // If the buffer is full, insert the metadata into the database
+            for (int i = 0; i < numStructs; ++i) {
+                // write the onehotvector to a file with the key value of the series
+                std::ofstream file;
+                std::string filename =std::to_string(keyvalues[i]) +  "_onehot" + ".txt";
+                file.open(filename);
+                file << std::to_string(keyvalues[i])+ ",";
+                for (int j = 0; j < 9; ++j) {
+                    file << seriesBuffer[i].onehot[j] << ",";
+                }
+                file << std::endl;
+            }
+            buffer = 0;
+        }
+
+        if (!gafQueue.ConsumeSync(key)) {
+            std::cerr << "Failed to consume key from seriesQueue" << std::endl;
+            continue;
+        }
+
+        // Get the series from the hashmap
+        if (!seriesMap.find(key, series)) {
+            std::cerr << "Failed to find series in seriesMap" << std::endl;
+            continue;
+        }
+
+         // Store the series in the buffer
+        keyvalues[buffer] = key;
+        seriesBuffer[buffer] = series;
+
+        buffer++;
+    }
+}   
 
 
 void setDBCache() {
@@ -482,6 +581,11 @@ void setDBCache() {
         return;
     }
     execQuery(conn, "SET GLOBAL innodb_buffer_pool_size = 8 * 1024 * 1024 * 1024;");
+    execQuery(conn, "SET GLOBAL innodb_buffer_pool_instances = 8;");
+    //close the connection
+    mysql_close(conn);
+
+    
 }
 
 int main(int argc, char* argv[]) {
@@ -491,7 +595,7 @@ int main(int argc, char* argv[]) {
     // for (int i = 0; i < argc; ++i) {
     //     std::cout << "argv[" << i << "]: " << argv[i] << std::endl;
     // }
-    if (argc != 6) {
+    if (argc != 5) {
         cerr << "Usage: " << argv[0];
         cerr << " <house number> <number of threads> <batch size> ";
         cerr << "<number of batches>" << endl;
@@ -508,29 +612,35 @@ int main(int argc, char* argv[]) {
     int times = atoi(argv[4]);
 int buffer=0;
     Series seriesBuffer[120];
-    std::thread extractors[thAmmount];
+    std::thread threads[thAmmount*3];
     int threadBatchSize = batchSize / thAmmount;
 
     // Create and execute threads
-    for (int i = 0; i < thAmmount; ++i) {
+    int i = 0;
+    while ( i < thAmmount ) {
         MYSQL* conn = mysql_init(nullptr);
         if (!conn) {
             std::cerr << "Failed to initialize MYSQL object" << std::endl;
             return 1;
         }
-        extractors[i] = std::thread(extractor, conn, house, threadBatchSize, times);
+        threads[i] = std::thread(extractor, conn, house, threadBatchSize, times);
+        i++;
+        std::cout << "Starting GAF thread" << std::endl;
+        threads[i] = std::thread(thGAF); 
+        i++;
+        std::cout << "Starting metadata thread" << std::endl;
+        threads[i] = std::thread(metadatos);
+        ++i;
     }
     // initiate the GAF thread
-    std::cout << "Starting GAF thread" << std::endl;
-    std::thread gaf(thGAF);
 
     
     //join the threads  
 
-    for (auto &th : extractors) {
+    for (auto &th : threads) {
         th.join();
     }
-    gaf.join();
+
 
     //print the contents of the seriesMap and the seriesQueue
     // std::cout << "SeriesQuestd::thread gaf(thGAF);ue size: " << seriesQueue.Size() << std::endl;

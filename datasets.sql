@@ -1,4 +1,21 @@
-insert into House (`idHouse`) values ('House10');
+insert into House (`idHouse`) values ('House11');
+insert into House (`idHouse`) values ('House12');
+insert into House (`idHouse`) values ('House13');
+insert into House (`idHouse`) values ('House14');
+insert into House (`idHouse`) values ('House15');
+insert into House (`idHouse`) values ('House16');
+insert into House (`idHouse`) values ('House17');
+insert into House (`idHouse`) values ('House18');
+insert into House (`idHouse`) values ('House19');
+insert into House (`idHouse`) values ('House20');
+insert into House (`idHouse`) values ('House21');
+
+
+
+
+
+
+
 select * from datapoint  where House_idHouse=3 order by iddatapoint asc limit 1024;
 select count(*) from datapoint  where House_idHouse=1;
 select * from House;
