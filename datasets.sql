@@ -1,23 +1,6 @@
-insert into House (`idHouse`) values ('House11');
-insert into House (`idHouse`) values ('House12');
-insert into House (`idHouse`) values ('House13');
-insert into House (`idHouse`) values ('House14');
-insert into House (`idHouse`) values ('House15');
-insert into House (`idHouse`) values ('House16');
-insert into House (`idHouse`) values ('House17');
-insert into House (`idHouse`) values ('House18');
-insert into House (`idHouse`) values ('House19');
-insert into House (`idHouse`) values ('House20');
-insert into House (`idHouse`) values ('House21');
 
-
-
-
-
-
-
-select * from datapoint  where House_idHouse=3 order by iddatapoint asc limit 1024;
-select count(*) from datapoint  where House_idHouse=1;
+select * from datapoint  where House_idHouse=11 order by iddatapoint asc limit 1024;
+select count(*) from datapoint  where House_idHouse='13';
 select * from House;
 
 SELECT @@global.time_zone, @@session.time_zone;
@@ -25,6 +8,7 @@ SET GLOBAL time_zone = '+00:00';
 SET SESSION time_zone = '+00:00';
 
 SET GLOBAL innodb_buffer_pool_size = 8 * 1024 * 1024 * 1024;
+
 
 SELECT * FROM datapoint WHERE House_idHouse=1 order by iddatapoint asc LIMIT 200 OFFSET 0;
 
@@ -34,5 +18,19 @@ INSERT INTO `datasets`.`datapoint` ( `House_idHouse`, `timestamp`, `aggregate`, 
 SELECT * FROM datasets WHERE House = 1 LIMIT 200 OFFSET 0;
 SELECT * FROM datasets.datapoint WHERE House_idHouse=1 order by iddatapoint asc LIMIT 200 OFFSET 0;
 
-show columns from datasets.datapoint
+show columns from datasets.datapoint;
+SET SESSION wait_timeout = 28800; -- 8 hours
+SET SESSION interactive_timeout = 28800; -- 8 hours
+SET SESSION net_read_timeout = 600;
+SET SESSION net_write_timeout = 600;
+
+START TRANSACTION;
+
+DELETE FROM datapoint 
+WHERE datapoint.House_idHouse IN (14, 16, 17, 18, 19, 20, 21, 22);
+
+COMMIT;
+
+
+
 

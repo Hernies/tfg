@@ -11,6 +11,10 @@
 #include <cppconn/statement.h>
 #include <cppconn/resultset.h>
 #include <mysql_driver.h>
+#include <string>
+#include <vector>
+#include <sstream>
+
 using namespace std;
 
 
@@ -81,9 +85,85 @@ char* insert(char*& currentPointer, char* fileEnd, const char* filepath, int hou
     return currentPointer;
 }
 
+char* insertBatch(char*& currentPointer, char* fileEnd, const char* filepath, int house_id,std::unique_ptr<sql::Connection> &con, int batchSize) {
+    std::vector<char> buffer;
+    buffer.reserve(1024);
+    //read a line from the file
+    if (currentPointer >= fileEnd) {
+        std::cout << "End of file reached." << std::endl;
+        exit(0);
+    }
+
+    
+
+    // prepare the insert statement
+    std::vector<std::string> rows;
+    for (int i = 0; i <= batchSize && currentPointer<fileEnd; ++i) {
+        char* lineStart = currentPointer;
+        while (currentPointer < fileEnd && *currentPointer != '\n') {
+            ++currentPointer;
+        }
+        //save the line to a variable
+        buffer.insert(buffer.end(), lineStart, currentPointer);
+        //print the line
+        // std::cout.write(lineStart, currentPointer - lineStart);
+        //now, split the line into fields each separated by a comma, and insert the fields into an array
+        std::string line = std::string(buffer.begin(), buffer.end());
+        //split the line into fields each separated by a comma
+        std::stringstream ss(line);
+        std::string item;
+        std::vector<std::string> field;
+        while (std::getline(ss, item, ',')) {
+            field.push_back(item);
+        }
+        //print the contents of the row
+        // Construct the row and add it to the rows vector
+        std::string lastelem = field[12];
+        std::string row = "(" + std::to_string(house_id) + ", '" + field[0] + "', " + field[2] + ", " + field[3] + ", " + field[4] + ", " + field[5] + ", " + field[6] + ", " + field[7] + ", " + field[8] + ", " + field[9] + ", " + field[10] + ", " + field[11] + ", " + lastelem.erase(lastelem.size()-1) + ")";
+        //print query
+        rows.push_back(row);
+
+ 
+        //print the query
+        
+        // Move the pointer past the newline character for the next call
+        if (currentPointer < fileEnd) {
+            ++currentPointer;
+        }
+        //clear the buffer
+        buffer.clear();
+        //clear the field vector
+        field.clear();
+    }
+    try{
+        std::unique_ptr<sql::Statement> stmt(con->createStatement());
+        std::string query = "INSERT INTO `datasets`.`datapoint` ( `House_idHouse`, `timestamp`, `aggregate`, `appliance1`, `appliance2`, `appliance3`, `appliance4`, `appliance5`, `appliance6`, `appliance7`, `appliance8`, `appliance9`, `issues`) VALUES \n";
+        for (int i = 0; i < rows.size(); ++i) {
+            query += rows[i];
+            if (i < rows.size() - 1) {
+                query += ",\n";
+            }
+        } 
+        
+        // std::cout << query << std::endl;
+        stmt->execute(query);
+        // Print the query
+        std::cout << query << std::endl;
+    } catch (sql::SQLException &e) {
+        handleSQLException(e, __FILE__, __FUNCTION__, __LINE__);
+        exit (1);
+    }
+    return currentPointer;
+}
+
 void insertForever(char*& currentPointer, char* fileEnd, const char* filepath, int house_id,std::unique_ptr<sql::Connection> &con){
+    //promt to get batch size
+    int batchSize;
+    std::cout << "Enter the batch size: ";
+    std::cin >> batchSize;
+
     while (currentPointer < fileEnd) {
-        currentPointer = insert(currentPointer, fileEnd, filepath, house_id,con);
+        currentPointer = insertBatch(currentPointer, fileEnd, filepath, house_id,con,batchSize);
     }
 }
 
@@ -119,9 +199,11 @@ void prompt (char*& currentPointer,char*& mappedFile , char* fileEnd, const char
     switch(command){
         case 'p':
             printNextLine(currentPointer, fileEnd);
+            prompt (currentPointer, mappedFile,fileEnd,filepath,house_id,con);
             break;
         case 'i':
             insert(currentPointer, fileEnd,filepath,house_id,con);
+            prompt (currentPointer, mappedFile,fileEnd,filepath,house_id,con);
             break;
         case 'j':
             std::cout << "Enter the line number you want to jump to: ";

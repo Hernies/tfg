@@ -509,10 +509,8 @@ void thGAF() {
 void metadatos(){
 // connect to database
     
-    int patience = 0;
     int buffer = 0;
     int numStructs = 20; // Assuming a value for numStructs
-    int numVectors = 10; // Assuming a value for numVectors
     Series series;
     Series seriesBuffer[numStructs];
     int keyvalues[numStructs];
@@ -523,7 +521,6 @@ void metadatos(){
         // If the queue is empty, sleep for a little bit
         if (gafQueue.Size() <= 0) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            patience++;
             
             continue;
         }
@@ -607,12 +604,11 @@ int main(int argc, char* argv[]) {
 
     //parse the arguments
     int house = atoi(argv[1]);
-    int thAmmount = atoi(argv[2]);
+    int thAmmount = atoi(argv[2])*3;
     int batchSize = atoi(argv[3]);
     int times = atoi(argv[4]);
-int buffer=0;
     Series seriesBuffer[120];
-    std::thread threads[thAmmount*3];
+    std::thread threads[thAmmount];
     int threadBatchSize = batchSize / thAmmount;
 
     // Create and execute threads
@@ -624,10 +620,10 @@ int buffer=0;
             return 1;
         }
         threads[i] = std::thread(extractor, conn, house, threadBatchSize, times);
-        i++;
+        ++i;
         std::cout << "Starting GAF thread" << std::endl;
         threads[i] = std::thread(thGAF); 
-        i++;
+        ++i;
         std::cout << "Starting metadata thread" << std::endl;
         threads[i] = std::thread(metadatos);
         ++i;
