@@ -58,6 +58,7 @@ class CustomImageDataset(Dataset):
 
         house_id = house_file.split('_')[0]
         
+        image = None
         images = []
         onehot_path = None
 
@@ -110,32 +111,33 @@ class CustomImageDataset(Dataset):
         try:
             house_classes = [int(i) for i in house_classes]
         except ValueError:
-            print("Error converting house classes to integers")
-            #print house classes
-            print(house_classes)
-            print (house_prefix)
+            print(f"Error converting house classes to integers: {house_classes}")
 
-            house_classes = []
+        
         #house classes into tensor
-        house_classes = torch.tensor(house_classes, dtype=torch.int16)
+        # each house classes should be a tensor that 
+        house_classes = torch.tensor(house_classes, dtype=torch.float32)
 
         # Load one-hot vector
+        
         try:
-            onehot = np.loadtxt(onehot_path, dtype=int, delimiter=',')[1:]
-        except ValueError:
             with open(onehot_path, 'r') as f:
                 line = f.readline().strip()
                 onehot = np.array([int(i) for i in line.split(',') if i])[1:]
                 #array of 32 elements
-                expanded_onehot = np.zeros(32)
+                expanded_onehot = np.zeros(23)
                 #position the values in the position indicated from the house_classes
                 for i in range(len(house_classes)):
                     try:
                         expanded_onehot[int(house_classes[i])-1] = onehot[i]
                     except ValueError:
                         continue
-                onehot = torch.tensor(expanded_onehot, dtype=torch.int16)
+                onehot = torch.tensor(expanded_onehot, dtype=torch.float32)
                 # print the onehot vector only if it doesnt match the house_classes
+        except Exception as e:
+            print(f"onehot_path: {onehot_path}")
+            print(f"Error opening one-hot vector file: {e}")
+            onehot = None
 
         
 
@@ -152,7 +154,7 @@ class CustomImageDataset(Dataset):
 # dataset = CustomImageDataset(root_dir=data_dir, transform=transform)
 
 # # Create a DataLoader with a smaller batch size
-# batch_size = 500
+# batch_size = 5
 # data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0)
 
 # # Visualize some items

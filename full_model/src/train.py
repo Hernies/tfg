@@ -4,14 +4,26 @@ from torch.utils.data import DataLoader, random_split
 import torch.optim as optim
 import torch.nn as nn
 from torchvision import transforms
-from PIL import Image
 from NILMDataset import CustomImageDataset
 from NILMModel import NILMModel
+import torch.nn.functional as F
+
+def calculate_loss(pred_class_count, pred_time, true_class_count, true_time):
+    # Use MSELoss for class count prediction since it's a regression problem (count of instances)
+    # print(f"Pred Class Count Shape: {pred_class_count.shape}, True Class Count Shape: {true_class_count.shape}")
+    class_count_loss = F.mse_loss(pred_class_count, true_class_count.float())
+    
+    # Time prediction loss
+    # print(f"Pred Time Shape: {pred_time.shape}, True Time Shape: {true_time.shape}")
+    time_loss = F.mse_loss(pred_time, true_time)
+    
+    
+    return time_loss + class_count_loss
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train NILM Model')
     parser.add_argument('--data_dir', type=str, default='/home/hernies/Documents/tfg/full_model/data/REFIT_GAF', help='Directory with training data')
-    parser.add_argument('--batch_size', type=int, default=500, help='Batch size for training')
+    parser.add_argument('--batch_size', type=int, default=10, help='Batch size for training')
     parser.add_argument('--epochs', type=int, default=10000, help='Number of epochs to train')
     parser.add_argument('--learning_rate', type=float, default=0.001, help='Learning rate')
     parser.add_argument('--save_path', type=str, default='nilm_model.pth', help='Path to save the trained model')
@@ -42,10 +54,7 @@ def define_model(device):
     return model
 
 def train(model, train_loader, val_loader, epochs, learning_rate, device):
-    criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    
-    model.train()
     
     for epoch in range(epochs):
         running_loss = 0.0
@@ -55,14 +64,15 @@ def train(model, train_loader, val_loader, epochs, learning_rate, device):
             inputs, onehot_labels, house_labels = inputs.to(device), onehot_labels.to(device), house_labels.to(device)
             
             optimizer.zero_grad()
-            # Debug print for input shape
-            print(f'Input shape before reshaping: {inputs.shape}')
-            inputs = inputs.view(-1, inputs.shape[1], inputs.shape[2], inputs.shape[3])
-            print(f'Input shape after reshaping: {inputs.shape}')
+            
             outputs = model(inputs)
-            loss_onehot = criterion(outputs, onehot_labels)
-            loss_house = criterion(outputs, house_labels)
-            loss = loss_onehot + loss_house  # Combine losses if necessary; adjust as per your model's requirements
+            
+            # Debugging prints
+            # print(f"Inputs Shape: {inputs.shape}")
+            # print(f"Outputs Class Count Shape: {outputs[0].shape}, Outputs Time Shape: {outputs[1].shape}")
+            # print(f"Onehot Labels Shape: {onehot_labels.shape}, House Labels Shape: {house_labels.shape}")
+            
+            loss = calculate_loss(outputs[0], outputs[1], onehot_labels, house_labels)
             loss.backward()
             optimizer.step()
             
@@ -78,9 +88,7 @@ def train(model, train_loader, val_loader, epochs, learning_rate, device):
             for inputs, onehot_labels, house_labels in val_loader:
                 inputs, onehot_labels, house_labels = inputs.to(device), onehot_labels.to(device), house_labels.to(device)
                 outputs = model(inputs)
-                loss_onehot = criterion(outputs, onehot_labels)
-                loss_house = criterion(outputs, house_labels)
-                loss = loss_onehot + loss_house  # Combine losses if necessary; adjust as per your model's requirements
+                loss = calculate_loss(outputs[0], outputs[1], onehot_labels, house_labels)
                 val_loss += loss.item()
         
         avg_val_loss = val_loss / len(val_loader)
