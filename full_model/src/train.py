@@ -78,9 +78,12 @@ def train(model, train_loader, val_loader, epochs, learning_rate, device):
             optimizer.step()
             
             running_loss += loss.item()
+            # print statement has return carriage to overwrite itself in the console
+            print(f'Running loss: {loss.item()}')
         
         avg_loss = running_loss / len(train_loader)
         print(f'Epoch [{epoch + 1}/{epochs}], Loss: {avg_loss:.4f}')
+        
         
         # Validation phase
         model.eval()

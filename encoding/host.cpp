@@ -352,9 +352,9 @@ void thGAF() {
         int key;
         // If the queue is empty, sleep for a little bit
         if (seriesQueue.Size() <= 0) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
             patience++;
-            if (patience > 500) {
+            if (patience > 1000) {
                 std::cout << "THAT'S IT, I HAVE NO MORE PATIENCE" << std::endl;
                 break;
             }
