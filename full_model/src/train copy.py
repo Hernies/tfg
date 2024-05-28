@@ -17,8 +17,8 @@ def calculate_loss(pred_class_count, pred_time, true_class_count, true_time):
 def parse_args():
     parser = argparse.ArgumentParser(description='Train NILM Model')
     parser.add_argument('--data_dir', type=str, default='/home/hernies/Documents/tfg/full_model/data/REFIT_GAF', help='Directory with training data')
-    parser.add_argument('--batch_size', type=int, default=32, help='Batch size for training')
-    parser.add_argument('--epochs', type=int, default=10000, help='Number of epochs to train')
+    parser.add_argument('--batch_size', type=int, default=20, help='Batch size for training')
+    parser.add_argument('--epochs', type=int, default=31, help='Number of epochs to train')
     parser.add_argument('--learning_rate', type=float, default=0.001, help='Learning rate')
     parser.add_argument('--save_path', type=str, default='nilm_model.pth', help='Path to save the trained model')
     return parser.parse_args()
@@ -50,6 +50,7 @@ def define_model(device):
 
 def train(model, train_loader, val_loader, epochs, learning_rate, device):
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    train_losses = []  # Define the "train_losses" list
     
     for epoch in range(epochs):
         running_loss = 0.0
@@ -73,7 +74,7 @@ def train(model, train_loader, val_loader, epochs, learning_rate, device):
         avg_loss = running_loss / len(train_loader)
         train_losses.append(avg_loss)
         print(f'Epoch [{epoch + 1}/{epochs}], Loss: {avg_loss:.4f}')
-        
+
         model.eval()
         val_loss = 0.0
         with torch.no_grad():
