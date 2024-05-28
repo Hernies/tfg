@@ -8,17 +8,10 @@ from NILMDataset import CustomImageDataset
 from NILMModel import NILMModel
 import torch.nn.functional as F
 
-def calculate_loss(pred_class_count, pred_time, true_class_count, true_time):
-    # Use MSELoss for class count prediction since it's a regression problem (count of instances)
-    # print(f"Pred Class Count Shape: {pred_class_count.shape}, True Class Count Shape: {true_class_count.shape}")
-    class_count_loss = F.mse_loss(pred_class_count, true_class_count.float())
-    
-    # Time prediction loss
-    # print(f"Pred Time Shape: {pred_time.shape}, True Time Shape: {true_time.shape}")
-    time_loss = F.mse_loss(pred_time, true_time)
-    
-    
 
+def calculate_loss(pred_class_count, pred_time, true_class_count, true_time):
+    class_count_loss = F.mse_loss(pred_class_count, true_class_count.float())
+    time_loss = F.mse_loss(pred_time, true_time)
     return time_loss + class_count_loss
 
 def parse_args():
@@ -40,13 +33,14 @@ def load_data(data_dir, batch_size):
     dataset = CustomImageDataset(data_dir, transform=transform)
     print("Dataset loaded")
     
-    train_size = int(0.8 * len(dataset))
-    val_size = len(dataset) - train_size
+    train_size = int(0.8 * (len(dataset)))
+    val_size = int(len(dataset) - train_size)
     
     train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
-    
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+
+    print(f"Training set size: {len(train_dataset)}, Validation set size: {len(val_dataset)}")
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=8)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=8)
     
     return train_loader, val_loader
 
@@ -60,7 +54,7 @@ def train(model, train_loader, val_loader, epochs, learning_rate, device):
     for epoch in range(epochs):
         running_loss = 0.0
         model.train()
-        
+        i = 0
         for inputs, onehot_labels, house_labels in train_loader:
             inputs, onehot_labels, house_labels = inputs.to(device), onehot_labels.to(device), house_labels.to(device)
             
@@ -68,24 +62,18 @@ def train(model, train_loader, val_loader, epochs, learning_rate, device):
             
             outputs = model(inputs)
             
-            # Debugging prints
-            # print(f"Inputs Shape: {inputs.shape}")
-            # print(f"Outputs Class Count Shape: {outputs[0].shape}, Outputs Time Shape: {outputs[1].shape}")
-            # print(f"Onehot Labels Shape: {onehot_labels.shape}, House Labels Shape: {house_labels.shape}")
-            
             loss = calculate_loss(outputs[0], outputs[1], onehot_labels, house_labels)
             loss.backward()
             optimizer.step()
             
             running_loss += loss.item()
-            # print statement has return carriage to overwrite itself in the console
-            print(f'Running loss: {loss.item()}')
+            i += 1
+            print(f'Batch {i}/{len(train_loader)}', end='\r')  # Carriage return to overwrite line
         
         avg_loss = running_loss / len(train_loader)
+        train_losses.append(avg_loss)
         print(f'Epoch [{epoch + 1}/{epochs}], Loss: {avg_loss:.4f}')
         
-        
-        # Validation phase
         model.eval()
         val_loss = 0.0
         with torch.no_grad():
@@ -113,7 +101,7 @@ def main():
 
     train_loader, val_loader = load_data(args.data_dir, args.batch_size)
     model = define_model(device)  # Ensure the model is on the GPU
-    print(f"Beggining training on Device: {device}")
+    print(f"Beginning training on Device: {device}")
     train(model, train_loader, val_loader, args.epochs, args.learning_rate, device)
     save_model(model, args.save_path)
 

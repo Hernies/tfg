@@ -1,0 +1,4 @@
+Loading dataset...
+Dataset loaded
+Training set size: 167648, Validation set size: 41913
+Beginning training on Device: cuda
