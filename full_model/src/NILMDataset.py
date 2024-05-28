@@ -47,6 +47,7 @@ class CustomImageDataset(Dataset):
     def __getitem__(self, idx):
         # Determine which house file and line within that file corresponds to the index
         cumulative_length = 0
+        prefix_to_match = None
         for house_file in self.house_files:
              with open(os.path.join(self.root_dir, 'meta', house_file), 'r') as f:
                 lines = f.readlines()
@@ -61,6 +62,8 @@ class CustomImageDataset(Dataset):
         image = None
         images = []
         onehot_path = None
+        if prefix_to_match is None:
+            return self.__getitem__(np.random.randint(0, self.num_samples))
 
         # Generate a list of all the files in the house directory that match the prefix_to_match
         matching_files = [f for f in os.listdir(os.path.join(self.root_dir, house_id)) if f.startswith(prefix_to_match)]
@@ -71,14 +74,15 @@ class CustomImageDataset(Dataset):
         # If there are over 11 files, print the contents of the list
         if len(matching_files) > 11:
             print(matching_files)
-
+        if prefix_to_match is None or len(matching_files) == 0:
+            return self.__getitem__(np.random.randint(0, self.num_samples))
         # Iterate over the files in the list
         tensor_images = None
         for file in matching_files:
-            if not file.endswith(('.png', '.jpg')):
+            if file.endswith(('_onehot.txt')):
                 onehot_path = os.path.join(self.root_dir, house_id, file)
                 continue
-            if file.endswith(('_gaf.png', '.jpg')):
+            if file.endswith(('_gaf.png')):
                 img_path = os.path.join(self.root_dir, house_id, file)
                 try:
                     image = Image.open(img_path)
@@ -86,20 +90,32 @@ class CustomImageDataset(Dataset):
                     print(f"Error opening image: {e}")
                     continue
                 if self.transform:
-                    image = self.transform(image)
+                    try:
+                        image = self.transform(image)
+                        # turn image into tensor
+                    except Exception as e:
+                        print(f"Image path: {img_path}")
+                        print(f"Error transforming image: {e}")
+                        continue
                 else:
                     # Apply default transformation to ensure size consistency
                     transform = transforms.Compose([
                         transforms.Resize((256, 256)),  # Ensure all images are resized to 256x256
                         transforms.ToTensor(),
                     ])
-                    image = transform(image)
-                images.append(image)
-        # turn images into tensor
-        if not images:
-            print(f"No images found for index {idx}")
-        else:
-            tensor_images = torch.stack(images)
+                    try:
+                        image = transform(image)
+                    except Exception as e:
+                        print(f"Image path: {img_path}")
+                        print(f"Error transforming image: {e}")
+                        continue
+        #         images.append(image)
+        # # turn images into tensor
+        # try:
+        #     images = torch.stack(images)
+        # except Exception as e:
+        #     print(f"Error stacking images for matching files: {matching_files}")
+        #     print(f"Error: {e}")
 
 
 
@@ -119,7 +135,8 @@ class CustomImageDataset(Dataset):
         house_classes = torch.tensor(house_classes, dtype=torch.float32)
 
         # Load one-hot vector
-        
+        if image is None or onehot_path is None or house_classes is None:
+            return self.__getitem__(np.random.randint(0, self.num_samples))
         try:
             with open(onehot_path, 'r') as f:
                 line = f.readline().strip()
@@ -139,7 +156,8 @@ class CustomImageDataset(Dataset):
             print(f"Error opening one-hot vector file: {e}")
             onehot = None
 
-        
+        if image is None or onehot is None or house_classes is None:
+            return self.__getitem__(np.random.randint(0, self.num_samples))
 
         return image, onehot, house_classes
 

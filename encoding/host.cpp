@@ -215,8 +215,13 @@ void extractor (MYSQL* connObject, int house, int batchSize, int times) {
         //calculate offset
         int offset = i * batchSize;
         //create the query
-        std::string query = "SELECT * FROM datasets.datapoint WHERE House_idHouse=" + std::to_string(house) + " order by iddatapoint asc LIMIT " + std::to_string(batchSize) + " OFFSET " + std::to_string(offset);
-        // std::cout << "Query: " << query << std::endl;
+        std::string query = "SELECT * FROM ( SELECT @row_num := @row_num + 1 AS row_num, timestamp, House_idHouse, appliance1, appliance2, appliance3, appliance4, appliance5,  appliance6, appliance7, appliance8, appliance9, issues FROM datapoint WHERE House_idHouse = '";
+        query += std::to_string(house);
+        query += "' ORDER BY timestamp ) AS subquery WHERE subquery.row_num % 400 = 1 -- Adjust this modulus to select every 60th row limit ";
+        query += std::to_string(batchSize);
+        query += " offset ";
+        query += std::to_string(offset);
+        query += ";";
         // std::cout << std::to_string(mysql_real_query(conn, query.c_str(), query.length())) << std::endl;
         
         //execute the query
@@ -258,7 +263,7 @@ void extractor (MYSQL* connObject, int house, int batchSize, int times) {
                 //create a DataPoint object with the extracted values
                 //if the series is full, print the series
                 if (s == SERIES_SIZE-1) {
-                    // std::cout << "Series: "<< s << std::endl;
+                    
                     //store the min and max values for the series for ease of scaling calculus in the gpu
                     
                     for (int i = 0; i < 10; ++i) {
@@ -273,7 +278,9 @@ void extractor (MYSQL* connObject, int house, int batchSize, int times) {
                     seriesMap.insert(std::move(key), std::move(series));
                     //queue up the series to be processed by a gpuio into a concurrent queue
                     seriesQueue.Produce(std::move(key));
-                    //reset the series
+                    //empty the series
+                    series = Series();
+                    
                     s = 0;
                 } 
                 DataPoint dp = {iddatapoint, timestamp, aggregate, appliance1, appliance2, appliance3, appliance4, appliance5, appliance6, appliance7, appliance8, appliance9, issues};
@@ -304,7 +311,7 @@ void extractor (MYSQL* connObject, int house, int batchSize, int times) {
 
                 
                 // Accumulate the onehot vectors
-                std::transform(series.onehot.begin(), series.onehot.end(), dp.onehot.begin(), series.onehot.begin(), std::plus<>());
+                std::transform(series.onehot.begin(), series.onehot.end(), dp.onehot.begin(), series.onehot.begin(), std::plus<int>());
                 s++;
                 
                 //print the onehot vector for the series
@@ -363,41 +370,41 @@ void thGAF() {
                     //open file with name gaf+ the key value of the series
 
                     float scaledAggregate[vectorLength];
-                    float scaledAppliance1[vectorLength];
-                    float scaledAppliance2[vectorLength];
-                    float scaledAppliance3[vectorLength];
-                    float scaledAppliance4[vectorLength];
-                    float scaledAppliance5[vectorLength];
-                    float scaledAppliance6[vectorLength];
-                    float scaledAppliance7[vectorLength];
-                    float scaledAppliance8[vectorLength];
-                    float scaledAppliance9[vectorLength];
+                    // float scaledAppliance1[vectorLength];
+                    // float scaledAppliance2[vectorLength];
+                    // float scaledAppliance3[vectorLength];
+                    // float scaledAppliance4[vectorLength];
+                    // float scaledAppliance5[vectorLength];
+                    // float scaledAppliance6[vectorLength];
+                    // float scaledAppliance7[vectorLength];
+                    // float scaledAppliance8[vectorLength];
+                    // float scaledAppliance9[vectorLength];
 
 
 
                     for (int k = 0; k < vectorLength; ++k) {
                         // Scale the series to the range [0,1] using the min and max values of the series
                         scaledAggregate[k] = scale_and_adjust(seriesBuffer[i].dataPoints[k].aggregate, seriesBuffer->min[0], seriesBuffer->max[0]);
-                        scaledAppliance1[k] = scale_and_adjust(seriesBuffer[i].dataPoints[k].appliance1, seriesBuffer->min[1], seriesBuffer->max[1]);
-                        scaledAppliance2[k] = scale_and_adjust(seriesBuffer[i].dataPoints[k].appliance2, seriesBuffer->min[2], seriesBuffer->max[2]);
-                        scaledAppliance3[k] = scale_and_adjust(seriesBuffer[i].dataPoints[k].appliance3, seriesBuffer->min[3], seriesBuffer->max[3]);
-                        scaledAppliance4[k] = scale_and_adjust(seriesBuffer[i].dataPoints[k].appliance4, seriesBuffer->min[4], seriesBuffer->max[4]);
-                        scaledAppliance5[k] = scale_and_adjust(seriesBuffer[i].dataPoints[k].appliance5, seriesBuffer->min[5], seriesBuffer->max[5]);
-                        scaledAppliance6[k] = scale_and_adjust(seriesBuffer[i].dataPoints[k].appliance6, seriesBuffer->min[6], seriesBuffer->max[6]);
-                        scaledAppliance7[k] = scale_and_adjust(seriesBuffer[i].dataPoints[k].appliance7, seriesBuffer->min[7], seriesBuffer->max[7]);
-                        scaledAppliance8[k] = scale_and_adjust(seriesBuffer[i].dataPoints[k].appliance8, seriesBuffer->min[8], seriesBuffer->max[8]);
-                        scaledAppliance9[k] = scale_and_adjust(seriesBuffer[i].dataPoints[k].appliance9, seriesBuffer->min[9], seriesBuffer->max[9]);
+                        // scaledAppliance1[k] = scale_and_adjust(seriesBuffer[i].dataPoints[k].appliance1, seriesBuffer->min[1], seriesBuffer->max[1]);
+                        // scaledAppliance2[k] = scale_and_adjust(seriesBuffer[i].dataPoints[k].appliance2, seriesBuffer->min[2], seriesBuffer->max[2]);
+                        // scaledAppliance3[k] = scale_and_adjust(seriesBuffer[i].dataPoints[k].appliance3, seriesBuffer->min[3], seriesBuffer->max[3]);
+                        // scaledAppliance4[k] = scale_and_adjust(seriesBuffer[i].dataPoints[k].appliance4, seriesBuffer->min[4], seriesBuffer->max[4]);
+                        // scaledAppliance5[k] = scale_and_adjust(seriesBuffer[i].dataPoints[k].appliance5, seriesBuffer->min[5], seriesBuffer->max[5]);
+                        // scaledAppliance6[k] = scale_and_adjust(seriesBuffer[i].dataPoints[k].appliance6, seriesBuffer->min[6], seriesBuffer->max[6]);
+                        // scaledAppliance7[k] = scale_and_adjust(seriesBuffer[i].dataPoints[k].appliance7, seriesBuffer->min[7], seriesBuffer->max[7]);
+                        // scaledAppliance8[k] = scale_and_adjust(seriesBuffer[i].dataPoints[k].appliance8, seriesBuffer->min[8], seriesBuffer->max[8]);
+                        // scaledAppliance9[k] = scale_and_adjust(seriesBuffer[i].dataPoints[k].appliance9, seriesBuffer->min[9], seriesBuffer->max[9]);
                     }
                     cv::Mat gafImage(vectorLength, vectorLength, CV_32F);
-                    cv::Mat gafImageAp1(vectorLength, vectorLength, CV_32F);
-                    cv::Mat gafImageAp2(vectorLength, vectorLength, CV_32F);
-                    cv::Mat gafImageAp3(vectorLength, vectorLength, CV_32F);
-                    cv::Mat gafImageAp4(vectorLength, vectorLength, CV_32F);
-                    cv::Mat gafImageAp5(vectorLength, vectorLength, CV_32F);
-                    cv::Mat gafImageAp6(vectorLength, vectorLength, CV_32F);
-                    cv::Mat gafImageAp7(vectorLength, vectorLength, CV_32F);
-                    cv::Mat gafImageAp8(vectorLength, vectorLength, CV_32F);
-                    cv::Mat gafImageAp9(vectorLength, vectorLength, CV_32F);
+                    // cv::Mat gafImageAp1(vectorLength, vectorLength, CV_32F);
+                    // cv::Mat gafImageAp2(vectorLength, vectorLength, CV_32F);
+                    // cv::Mat gafImageAp3(vectorLength, vectorLength, CV_32F);
+                    // cv::Mat gafImageAp4(vectorLength, vectorLength, CV_32F);
+                    // cv::Mat gafImageAp5(vectorLength, vectorLength, CV_32F);
+                    // cv::Mat gafImageAp6(vectorLength, vectorLength, CV_32F);
+                    // cv::Mat gafImageAp7(vectorLength, vectorLength, CV_32F);
+                    // cv::Mat gafImageAp8(vectorLength, vectorLength, CV_32F);
+                    // cv::Mat gafImageAp9(vectorLength, vectorLength, CV_32F);
 
                     //open gaf text file
 
@@ -406,78 +413,78 @@ void thGAF() {
                             // Calculate the GAF encoding for the series
                             // Assuming gaf_encoding is a function that encodes based on k and l. the encoding is cos of the sum of the scaled values at positions k and l
                             float gafAggregate = cos(scaledAggregate[k] + scaledAggregate[l]);
-                            float gafAppliance1 = cos(scaledAppliance1[k] + scaledAppliance1[l]);
-                            float gafAppliance2 = cos(scaledAppliance2[k] + scaledAppliance2[l]);
-                            float gafAppliance3 = cos(scaledAppliance3[k] + scaledAppliance3[l]);
-                            float gafAppliance4 = cos(scaledAppliance4[k] + scaledAppliance4[l]);
-                            float gafAppliance5 = cos(scaledAppliance5[k] + scaledAppliance5[l]);
-                            float gafAppliance6 = cos(scaledAppliance6[k] + scaledAppliance6[l]);
-                            float gafAppliance7 = cos(scaledAppliance7[k] + scaledAppliance7[l]);
-                            float gafAppliance8 = cos(scaledAppliance8[k] + scaledAppliance8[l]);
-                            float gafAppliance9 = cos(scaledAppliance9[k] + scaledAppliance9[l]);
+                            // float gafAppliance1 = cos(scaledAppliance1[k] + scaledAppliance1[l]);
+                            // float gafAppliance2 = cos(scaledAppliance2[k] + scaledAppliance2[l]);
+                            // float gafAppliance3 = cos(scaledAppliance3[k] + scaledAppliance3[l]);
+                            // float gafAppliance4 = cos(scaledAppliance4[k] + scaledAppliance4[l]);
+                            // float gafAppliance5 = cos(scaledAppliance5[k] + scaledAppliance5[l]);
+                            // float gafAppliance6 = cos(scaledAppliance6[k] + scaledAppliance6[l]);
+                            // float gafAppliance7 = cos(scaledAppliance7[k] + scaledAppliance7[l]);
+                            // float gafAppliance8 = cos(scaledAppliance8[k] + scaledAppliance8[l]);
+                            // float gafAppliance9 = cos(scaledAppliance9[k] + scaledAppliance9[l]);
                             
                             // all images
                             gafImage.at<float>(k, l) = gafAggregate;
-                            gafImageAp1.at<float>(k, l) = gafAppliance1;
-                            gafImageAp2.at<float>(k, l) = gafAppliance2;
-                            gafImageAp3.at<float>(k, l) = gafAppliance3;
-                            gafImageAp4.at<float>(k, l) = gafAppliance4;
-                            gafImageAp5.at<float>(k, l) = gafAppliance5;
-                            gafImageAp6.at<float>(k, l) = gafAppliance6;
-                            gafImageAp7.at<float>(k, l) = gafAppliance7;
-                            gafImageAp8.at<float>(k, l) = gafAppliance8;
-                            gafImageAp9.at<float>(k, l) = gafAppliance9;
+                            // gafImageAp1.at<float>(k, l) = gafAppliance1;
+                            // gafImageAp2.at<float>(k, l) = gafAppliance2;
+                            // gafImageAp3.at<float>(k, l) = gafAppliance3;
+                            // gafImageAp4.at<float>(k, l) = gafAppliance4;
+                            // gafImageAp5.at<float>(k, l) = gafAppliance5;
+                            // gafImageAp6.at<float>(k, l) = gafAppliance6;
+                            // gafImageAp7.at<float>(k, l) = gafAppliance7;
+                            // gafImageAp8.at<float>(k, l) = gafAppliance8;
+                            // gafImageAp9.at<float>(k, l) = gafAppliance9;
                         }
                     }
 
                     // Normalize the GAF image to [0, 1]
                     // Create a color image
                     cv::Mat colorImage(vectorLength, vectorLength, CV_8UC3);
-                    cv::Mat colorImageAp1(vectorLength, vectorLength, CV_8UC3);
-                    cv::Mat colorImageAp2(vectorLength, vectorLength, CV_8UC3);
-                    cv::Mat colorImageAp3(vectorLength, vectorLength, CV_8UC3);
-                    cv::Mat colorImageAp4(vectorLength, vectorLength, CV_8UC3);
-                    cv::Mat colorImageAp5(vectorLength, vectorLength, CV_8UC3);
-                    cv::Mat colorImageAp6(vectorLength, vectorLength, CV_8UC3);
-                    cv::Mat colorImageAp7(vectorLength, vectorLength, CV_8UC3);
-                    cv::Mat colorImageAp8(vectorLength, vectorLength, CV_8UC3);
-                    cv::Mat colorImageAp9(vectorLength, vectorLength, CV_8UC3);
+                    // cv::Mat colorImageAp1(vectorLength, vectorLength, CV_8UC3);
+                    // cv::Mat colorImageAp2(vectorLength, vectorLength, CV_8UC3);
+                    // cv::Mat colorImageAp3(vectorLength, vectorLength, CV_8UC3);
+                    // cv::Mat colorImageAp4(vectorLength, vectorLength, CV_8UC3);
+                    // cv::Mat colorImageAp5(vectorLength, vectorLength, CV_8UC3);
+                    // cv::Mat colorImageAp6(vectorLength, vectorLength, CV_8UC3);
+                    // cv::Mat colorImageAp7(vectorLength, vectorLength, CV_8UC3);
+                    // cv::Mat colorImageAp8(vectorLength, vectorLength, CV_8UC3);
+                    // cv::Mat colorImageAp9(vectorLength, vectorLength, CV_8UC3);
 
                     for (int k = 0; k < vectorLength; ++k) {
                         for (int l = 0; l < vectorLength; ++l) {
                             colorImage.at<cv::Vec3b>(k, l) = apply_colormap(gafImage.at<float>(k, l));
-                            colorImageAp1.at<cv::Vec3b>(k, l) = apply_colormap(gafImageAp1.at<float>(k, l));
-                            colorImageAp2.at<cv::Vec3b>(k, l) = apply_colormap(gafImageAp2.at<float>(k, l));
-                            colorImageAp3.at<cv::Vec3b>(k, l) = apply_colormap(gafImageAp3.at<float>(k, l));
-                            colorImageAp4.at<cv::Vec3b>(k, l) = apply_colormap(gafImageAp4.at<float>(k, l));
-                            colorImageAp5.at<cv::Vec3b>(k, l) = apply_colormap(gafImageAp5.at<float>(k, l));
-                            colorImageAp6.at<cv::Vec3b>(k, l) = apply_colormap(gafImageAp6.at<float>(k, l));
-                            colorImageAp7.at<cv::Vec3b>(k, l) = apply_colormap(gafImageAp7.at<float>(k, l));
-                            colorImageAp8.at<cv::Vec3b>(k, l) = apply_colormap(gafImageAp8.at<float>(k, l));
-                            colorImageAp9.at<cv::Vec3b>(k, l) = apply_colormap(gafImageAp9.at<float>(k, l));
+                            // colorImageAp1.at<cv::Vec3b>(k, l) = apply_colormap(gafImageAp1.at<float>(k, l));
+                            // colorImageAp2.at<cv::Vec3b>(k, l) = apply_colormap(gafImageAp2.at<float>(k, l));
+                            // colorImageAp3.at<cv::Vec3b>(k, l) = apply_colormap(gafImageAp3.at<float>(k, l));
+                            // colorImageAp4.at<cv::Vec3b>(k, l) = apply_colormap(gafImageAp4.at<float>(k, l));
+                            // colorImageAp5.at<cv::Vec3b>(k, l) = apply_colormap(gafImageAp5.at<float>(k, l));
+                            // colorImageAp6.at<cv::Vec3b>(k, l) = apply_colormap(gafImageAp6.at<float>(k, l));
+                            // colorImageAp7.at<cv::Vec3b>(k, l) = apply_colormap(gafImageAp7.at<float>(k, l));
+                            // colorImageAp8.at<cv::Vec3b>(k, l) = apply_colormap(gafImageAp8.at<float>(k, l));
+                            // colorImageAp9.at<cv::Vec3b>(k, l) = apply_colormap(gafImageAp9.at<float>(k, l));
                         }
                     }
 
                     std::string filename = std::to_string(keyvalues[i]) + "_gaf" +".png";
                     cv::imwrite(filename, colorImage);
-                    std::string filenameAp1 = std::to_string(keyvalues[i]) + "_gafAp1" +".png";
-                    cv::imwrite(filenameAp1, colorImageAp1);
-                    std::string filenameAp2 = std::to_string(keyvalues[i]) + "_gafAp2" +".png";
-                    cv::imwrite(filenameAp2, colorImageAp2);
-                    std::string filenameAp3 = std::to_string(keyvalues[i]) + "_gafAp3" +".png";
-                    cv::imwrite(filenameAp3, colorImageAp3);
-                    std::string filenameAp4 = std::to_string(keyvalues[i]) + "_gafAp4" +".png";
-                    cv::imwrite(filenameAp4, colorImageAp4);
-                    std::string filenameAp5 = std::to_string(keyvalues[i]) + "_gafAp5" +".png";
-                    cv::imwrite(filenameAp5, colorImageAp5);
-                    std::string filenameAp6 = std::to_string(keyvalues[i]) + "_gafAp6" +".png";
-                    cv::imwrite(filenameAp6, colorImageAp6);
-                    std::string filenameAp7 = std::to_string(keyvalues[i]) + "_gafAp7" +".png";
-                    cv::imwrite(filenameAp7, colorImageAp7);
-                    std::string filenameAp8 = std::to_string(keyvalues[i]) + "_gafAp8" +".png";
-                    cv::imwrite(filenameAp8, colorImageAp8);
-                    std::string filenameAp9 = std::to_string(keyvalues[i]) + "_gafAp9" +".png";
-                    cv::imwrite(filenameAp9, colorImageAp9);
+                    // std::string filenameAp1 = std::to_string(keyvalues[i]) + "_gafAp1" +".png";
+                    // cv::imwrite(filenameAp1, colorImageAp1);
+                    // std::string filenameAp2 = std::to_string(keyvalues[i]) + "_gafAp2" +".png";
+                    // cv::imwrite(filenameAp2, colorImageAp2);
+                    // std::string filenameAp3 = std::to_string(keyvalues[i]) + "_gafAp3" +".png";
+                    // cv::imwrite(filenameAp3, colorImageAp3);
+                    // std::string filenameAp4 = std::to_string(keyvalues[i]) + "_gafAp4" +".png";
+                    // cv::imwrite(filenameAp4, colorImageAp4);
+                    // std::string filenameAp5 = std::to_string(keyvalues[i]) + "_gafAp5" +".png";
+                    // cv::imwrite(filenameAp5, colorImageAp5);
+                    // std::string filenameAp6 = std::to_string(keyvalues[i]) + "_gafAp6" +".png";
+                    // cv::imwrite(filenameAp6, colorImageAp6);
+                    // std::string filenameAp7 = std::to_string(keyvalues[i]) + "_gafAp7" +".png";
+                    // cv::imwrite(filenameAp7, colorImageAp7);
+                    // std::string filenameAp8 = std::to_string(keyvalues[i]) + "_gafAp8" +".png";
+                    // cv::imwrite(filenameAp8, colorImageAp8);
+                    // std::string filenameAp9 = std::to_string(keyvalues[i]) + "_gafAp9" +".png";
+                    // cv::imwrite(filenameAp9, colorImageAp9);
 
                     //insert into the queue the key value of the series
                     gafQueue.Produce(std::move(keyvalues[i]));

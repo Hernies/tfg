@@ -18,13 +18,14 @@ def calculate_loss(pred_class_count, pred_time, true_class_count, true_time):
     time_loss = F.mse_loss(pred_time, true_time)
     
     
+
     return time_loss + class_count_loss
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train NILM Model')
     parser.add_argument('--data_dir', type=str, default='/home/hernies/Documents/tfg/full_model/data/REFIT_GAF', help='Directory with training data')
     parser.add_argument('--batch_size', type=int, default=10, help='Batch size for training')
-    parser.add_argument('--epochs', type=int, default=10000, help='Number of epochs to train')
+    parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train')
     parser.add_argument('--learning_rate', type=float, default=0.001, help='Learning rate')
     parser.add_argument('--save_path', type=str, default='nilm_model.pth', help='Path to save the trained model')
     return parser.parse_args()
@@ -109,6 +110,7 @@ def main():
 
     train_loader, val_loader = load_data(args.data_dir, args.batch_size)
     model = define_model(device)  # Ensure the model is on the GPU
+    print(f"Beggining training on Device: {device}")
     train(model, train_loader, val_loader, args.epochs, args.learning_rate, device)
     save_model(model, args.save_path)
 

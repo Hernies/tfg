@@ -42,7 +42,7 @@ y luego ya compilar con pdflatex
 # Compilación de programas
 g++ -g traversecsv.cpp  -o traversecsv -lmysqlcppconn
 
-g++ -g -Wall -std=c++2a -Ieventloop -Ihashmap -Isafequeue host.cpp -lpthread -L /usr/lib/x86_64-linux-gnu -lmysqlclient -o host
+g++ -g -Wall -std=c++2a -Ieventloop -Ihashmap -Isafequeue -I/usr/include/opencv4 host.cpp -lpthread -L /usr/lib/x86_64-linux-gnu -lmysqlclient -lopencv_core -lopencv_imgcodecs -o host
 
 # ejecutar el dataset
 python3 train.py --data_dir /home/hernies/Documents/tfg/full_model/data/REFIT_GAF --batch_size 500 --epochs 10000 --learning_rate 0.05  --save_path /home/hernies/Documents/tfg/full_model/first_test
