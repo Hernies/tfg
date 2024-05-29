@@ -1,4 +1,69 @@
+python3 train\ copy.py 
 Loading dataset...
 Dataset loaded
 Training set size: 167648, Validation set size: 41913
 Beginning training on Device: cuda
+Epoch [1/31], Loss: 1275860.5801
+Epoch [1/31], Validation Loss: 1258203.0888
+Epoch [2/31], Loss: 1239944.8109
+Epoch [2/31], Validation Loss: 1248375.5132
+Epoch [3/31], Loss: 1232490.7571
+Epoch [3/31], Validation Loss: 1243576.7251
+Epoch [4/31], Loss: 1222045.9590
+Epoch [4/31], Validation Loss: 1230645.6731
+Epoch [5/31], Loss: 1208349.6832
+Epoch [5/31], Validation Loss: 1211001.2057
+Epoch [6/31], Loss: 1186056.1209
+Epoch [6/31], Validation Loss: 1178851.7018
+Epoch [7/31], Loss: 1165030.7870
+Epoch [7/31], Validation Loss: 1167331.8435
+Epoch [8/31], Loss: 1149135.8998
+Epoch [8/31], Validation Loss: 1185164.9555
+Epoch [9/31], Loss: 1134316.6055
+Epoch [9/31], Validation Loss: 1147995.8978
+Epoch [10/31], Loss: 1120209.8131
+Epoch [10/31], Validation Loss: 1185754.6170
+Epoch [11/31], Loss: 1107431.9880
+Epoch [11/31], Validation Loss: 1115734.5071
+Epoch [12/31], Loss: 1094703.2892
+Epoch [12/31], Validation Loss: 1113124.6664
+Epoch [13/31], Loss: 1081232.2250
+Epoch [13/31], Validation Loss: 1100778.1807
+Epoch [14/31], Loss: 1066613.6097
+Epoch [14/31], Validation Loss: 1202871.0827
+Epoch [15/31], Loss: 1052057.2042
+Epoch [15/31], Validation Loss: 1063597.3945
+Epoch [16/31], Loss: 1033826.2779
+Epoch [16/31], Validation Loss: 1097150.4752
+Epoch [17/31], Loss: 1017681.8763
+Epoch [17/31], Validation Loss: 1058284.1120
+Epoch [18/31], Loss: 998097.8624
+Epoch [18/31], Validation Loss: 1077911.6395
+Epoch [19/31], Loss: 975962.7929
+Epoch [19/31], Validation Loss: 1088531.2884
+Epoch [20/31], Loss: 950146.2673
+Epoch [20/31], Validation Loss: 1091334.2070
+Epoch [21/31], Loss: 922775.0684
+Epoch [21/31], Validation Loss: 1026779.1235
+Epoch [22/31], Loss: 892669.8587
+Epoch [22/31], Validation Loss: 1271614.1852
+Epoch [23/31], Loss: 861549.4921
+Epoch [23/31], Validation Loss: 1013090.4323
+Epoch [24/31], Loss: 827917.5243
+Epoch [24/31], Validation Loss: 991317.0748
+Epoch [25/31], Loss: 795742.5889
+Epoch [25/31], Validation Loss: 1030118.0914
+Epoch [26/31], Loss: 762943.6791
+Epoch [26/31], Validation Loss: 946600.8136
+Epoch [27/31], Loss: 729392.8069
+Epoch [27/31], Validation Loss: 921384.0134
+Epoch [28/31], Loss: 697548.4975
+Epoch [28/31], Validation Loss: 921769.0921
+Epoch [29/31], Loss: 665171.9888
+Epoch [29/31], Validation Loss: 936907.4600
+Epoch [30/31], Loss: 635143.6591
+Epoch [30/31], Validation Loss: 823571.9538
+Epoch [31/31], Loss: 606838.8649
+Epoch [31/31], Validation Loss: 818315.6077
+Training completed
+Model saved to nilm_model.pth
