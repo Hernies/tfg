@@ -149,13 +149,13 @@ class CustomImageDataset(Dataset):
             with open(onehot_path, 'r') as f:
                 line = f.readline().strip()
                 onehot = np.array([int(i) for i in line.split(',') if i])[1:]
-                print (onehot)
+                # print (onehot)
                 #array of 32 elements
                 expanded_onehot = np.zeros(23)
                 #position the values in the position indicated from the house_classes
                 for i in range(len(house_classes)):
                     try:
-                        expanded_onehot[int(house_classes[i])-1] = onehot[i]
+                        expanded_onehot[int(house_classes[i])-1] = onehot[i]/255 #normalize the values
                     except ValueError:
                         continue
                 onehot = torch.tensor(expanded_onehot, dtype=torch.float32)
@@ -182,7 +182,7 @@ if __name__ == "__main__":
     dataset = CustomImageDataset(root_dir=data_dir, transform=transform)
 
     # Create a DataLoader with a smaller batch size
-    batch_size = 20
+    batch_size = 1
     data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0)
 
     # Get a batch of training data
@@ -194,6 +194,7 @@ if __name__ == "__main__":
     #     print(f"One-hot vector: {onehots[i].numpy()}")
     #     print(f"House classes: {house_classes[i].numpy()}")
     #     imshow(torchvision.utils.make_grid(images[i]))
-
+    print(f"Onehot size: {onehots.size()}")
     print(f"One-hot vector: {onehots.numpy()}")
+    print(f"House size: {house_classes.size()}")
     print(f"House classes: {house_classes.numpy()}")
