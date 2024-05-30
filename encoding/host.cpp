@@ -270,7 +270,6 @@ void extractor (MYSQL* connObject, int house, int batchSize, int times) {
                     //store the series in the hash map
 
                     int key = iddatapoint-1;
-                    std::cout << "Inserting series: " << key << std::endl;
                     seriesMap.insert(std::move(key), std::move(series));
                     //queue up the series to be processed by a gpuio into a concurrent queue
                     seriesQueue.Produce(std::move(key));
@@ -280,7 +279,6 @@ void extractor (MYSQL* connObject, int house, int batchSize, int times) {
                 } 
                 DataPoint dp = {iddatapoint, timestamp, aggregate, appliance1, appliance2, appliance3, appliance4, appliance5, appliance6, appliance7, appliance8, appliance9, issues};
                 //add the DataPoint object to the series
-                std::cout << "DataPoint: " << dp.onehot[0] << " " << dp.onehot[1] << " " << dp.onehot[2] << " " << dp.onehot[3] << " " << dp.onehot[4] << " " << dp.onehot[5] << " " << dp.onehot[6] << " " << dp.onehot[7] << " " << dp.onehot[8] << std::endl;
                 series.dataPoints[s] = dp;
                 //accumulate the max and min values for the aggregate and appliances
                 min[0] = (aggregate < min[0])? aggregate : min[0];
@@ -310,7 +308,6 @@ void extractor (MYSQL* connObject, int house, int batchSize, int times) {
                 for (int i = 0; i < 9; ++i) {
                     series.onehot[i] += dp.onehot[i];
                 }
-                std::cout << "Series: " << series.onehot[0] << " " << series.onehot[1] << " " << series.onehot[2] << " " << series.onehot[3] << " " << series.onehot[4] << " " << series.onehot[5] << " " << series.onehot[6] << " " << series.onehot[7] << " " << series.onehot[8] << std::endl;
                 // print the values of the onehot and the series onehot vector
                
                 s++;
