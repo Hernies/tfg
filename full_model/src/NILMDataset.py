@@ -132,8 +132,16 @@ class CustomImageDataset(Dataset):
         
         #house classes into tensor
         # each house classes should be a tensor that 
-        house_classes = torch.tensor(house_classes, dtype=torch.float32)
-
+        # has 23 elements, each element is [0,1) and all elements are natural numbers (non-negative integers)
+        #expand the house classes into a tensor of 23 elements
+        expanded_house_classes = torch.zeros(23)
+        #position the values in the position indicated from the house_classes
+        for i in range(len(house_classes)):
+            try:
+                expanded_house_classes[int(house_classes[i])-1] += 1
+            except ValueError:
+                continue
+        
         # Load one-hot vector
         if image is None or onehot_path is None or house_classes is None:
             return self.__getitem__(np.random.randint(0, self.num_samples))
@@ -141,6 +149,7 @@ class CustomImageDataset(Dataset):
             with open(onehot_path, 'r') as f:
                 line = f.readline().strip()
                 onehot = np.array([int(i) for i in line.split(',') if i])[1:]
+                print (onehot)
                 #array of 32 elements
                 expanded_onehot = np.zeros(23)
                 #position the values in the position indicated from the house_classes
@@ -159,35 +168,32 @@ class CustomImageDataset(Dataset):
         if image is None or onehot is None or house_classes is None:
             return self.__getitem__(np.random.randint(0, self.num_samples))
 
-        return image, onehot, house_classes
+        return image, onehot, expanded_house_classes
 
-# #Define your transformations
-# transform = transforms.Compose([
-#     transforms.Resize((256, 256)),
-#     transforms.ToTensor(),
-#     ])
+if __name__ == "__main__":
+    # Define your transformations
+    transform = transforms.Compose([
+        transforms.Resize((256, 256)),
+        transforms.ToTensor(),
+    ])
 
-# # # Load the dataset
-# data_dir = '/home/hernies/Documents/tfg/full_model/data/REFIT_GAF'
-# dataset = CustomImageDataset(root_dir=data_dir, transform=transform)
+    # Load the dataset
+    data_dir = '/home/hernies/Documents/tfg/full_model/data/REFIT_GAF'
+    dataset = CustomImageDataset(root_dir=data_dir, transform=transform)
 
-# # Create a DataLoader with a smaller batch size
-# batch_size = 5
-# data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0)
+    # Create a DataLoader with a smaller batch size
+    batch_size = 20
+    data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0)
 
-# # Visualize some items
-# def imshow(img):
-#     img = img / 2 + 0.5  # unnormalize
-#     npimg = img.numpy()
-#     plt.imshow(np.transpose(npimg, (1, 2, 0)))
-#     plt.show()
+    # Get a batch of training data
+    data_iter = iter(data_loader)
+    images, onehots, house_classes = next(data_iter)
 
-# # Get a batch of training data
-# data_iter = iter(data_loader)
-# images, onehots, house_classes = next(data_iter)
+    # Show images
+    # for i in range(batch_size):
+    #     print(f"One-hot vector: {onehots[i].numpy()}")
+    #     print(f"House classes: {house_classes[i].numpy()}")
+    #     imshow(torchvision.utils.make_grid(images[i]))
 
-# # Show images
-# for i in range(batch_size):
-#     print(f"One-hot vector: {onehots[i].numpy()}")
-#     print(f"House classes: {house_classes}")
-#     imshow(torchvision.utils.make_grid(images[i]))
+    print(f"One-hot vector: {onehots.numpy()}")
+    print(f"House classes: {house_classes.numpy()}")

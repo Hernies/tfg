@@ -7,17 +7,15 @@ from torchvision import transforms
 from NILMDataset import CustomImageDataset
 from NILMModel import NILMModel
 import torch.nn.functional as F
+import torch.optim as optim
+import torch.nn.functional as F
 
 
-def calculate_loss(pred_class_count, pred_time, true_class_count, true_time):
-    class_count_loss = F.mse_loss(pred_class_count, true_class_count.float())
-    time_loss = F.mse_loss(pred_time, true_time)
-    return time_loss + class_count_loss
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train NILM Model')
     parser.add_argument('--data_dir', type=str, default='/home/hernies/Documents/tfg/full_model/data/REFIT_GAF', help='Directory with training data')
-    parser.add_argument('--batch_size', type=int, default=20, help='Batch size for training')
+    parser.add_argument('--batch_size', type=int, default=1, help='Batch size for training')
     parser.add_argument('--epochs', type=int, default=31, help='Number of epochs to train')
     parser.add_argument('--learning_rate', type=float, default=0.001, help='Learning rate')
     parser.add_argument('--save_path', type=str, default='nilm_model.pth', help='Path to save the trained model')
@@ -48,46 +46,68 @@ def define_model(device):
     model = NILMModel().to(device)  # Ensure the model is on the GPU
     return model
 
-def train(model, train_loader, val_loader, epochs, learning_rate, device):
+
+def calculate_loss(pred_class_count, pred_time, true_class_count, true_time, alpha=0.5):
+    class_count_loss = F.binary_cross_entropy(pred_class_count, true_class_count.float())
+    time_loss = F.mse_loss(pred_time, true_time)
+    print(f"Class Count Loss: {alpha * class_count_loss}, Time Loss: {(1 - alpha) * time_loss}")
+    return alpha * class_count_loss + (1 - alpha) * time_loss
+
+def train(model, train_loader, val_loader, epochs, learning_rate, device, alpha=0.5):
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    train_losses = []  # Define the "train_losses" list
-    
+    best_val_loss = float('inf')
+    patience = 5
+    patience_counter = 0
+
     for epoch in range(epochs):
         running_loss = 0.0
         model.train()
-        i = 0
-        for inputs, onehot_labels, house_labels in train_loader:
-            inputs, onehot_labels, house_labels = inputs.to(device), onehot_labels.to(device), house_labels.to(device)
+        for i, (image, time, classes) in enumerate(train_loader):
+            image, time, classes = image.to(device), time.to(device), classes.to(device)
             
             optimizer.zero_grad()
+            class_outputs, time_outputs = model(image)
+
+            # Debugging statements
+            print("Class Outputs:", class_outputs)
+            print("True Class Labels:", classes)
+            print("Time Outputs:", time_outputs)
+            print("True Time Labels:", time)
             
-            outputs = model(inputs)
-            
-            loss = calculate_loss(outputs[0], outputs[1], onehot_labels, house_labels)
+            loss = calculate_loss(class_outputs, time_outputs, classes, time, alpha)
             loss.backward()
             optimizer.step()
             
             running_loss += loss.item()
-            i += 1
-            print(f'Batch {i}/{len(train_loader)}', end='\r')  # Carriage return to overwrite line
+            
         
         avg_loss = running_loss / len(train_loader)
-        train_losses.append(avg_loss)
         print(f'Epoch [{epoch + 1}/{epochs}], Loss: {avg_loss:.4f}')
 
         model.eval()
         val_loss = 0.0
         with torch.no_grad():
-            for inputs, onehot_labels, house_labels in val_loader:
-                inputs, onehot_labels, house_labels = inputs.to(device), onehot_labels.to(device), house_labels.to(device)
-                outputs = model(inputs)
-                loss = calculate_loss(outputs[0], outputs[1], onehot_labels, house_labels)
+            for image, time, classes in val_loader:
+                image, time, classes = image.to(device), time.to(device), classes.to(device)
+                class_outputs, time_outputs = model(image)
+                loss = calculate_loss(class_outputs, time_outputs, time, classes, alpha)
                 val_loss += loss.item()
         
         avg_val_loss = val_loss / len(val_loader)
         print(f'Epoch [{epoch + 1}/{epochs}], Validation Loss: {avg_val_loss:.4f}')
-    
+
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
+            patience_counter = 0
+            torch.save(model.state_dict(), 'best_model.pth')
+        else:
+            patience_counter += 1
+            if patience_counter >= patience:
+                print("Early stopping triggered")
+                break
+
     print('Training completed')
+    model.load_state_dict(torch.load('best_model.pth'))
 
 def save_model(model, save_path):
     torch.save(model.state_dict(), save_path)
