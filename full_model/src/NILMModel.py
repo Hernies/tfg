@@ -21,7 +21,6 @@ class NILMModel(nn.Module):
         features = self.global_avg_pool(features)
         features = features.view(features.size(0), -1)  # Flatten the features
         class_count_out = self.fc_class_count(features)
-        class_count_out = torch.sigmoid(class_count_out)  # Apply sigmoid for multi-label classification
         time_out = self.fc_time(features)
         return class_count_out, time_out
 

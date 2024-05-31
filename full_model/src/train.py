@@ -4,14 +4,12 @@ import math
 import torch.optim as optim
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.optim as optim
 from torch.utils.data import DataLoader, random_split
 from torchvision import transforms
 from NILMDataset import CustomImageDataset
 from NILMModel import NILMModel
-from sklearn.metrics import f1_score, silhouette_score, precision_recall_fscore_support
-
-
+from CustomCrossEntropy import CustomCrossEntropyLoss
+from sklearn.metrics import f1_score, precision_recall_fscore_support
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train NILM Model')
@@ -47,124 +45,139 @@ def define_model(device):
     model = NILMModel().to(device)  # Ensure the model is on the GPU
     return model
 
-
-def calculate_loss(pred_class_count, pred_time, true_class_count, true_time):
-    #print all parameters
-    # print(f'pred_class_count: {pred_class_count}')
-    # print(f'true_class_count: {true_class_count}')
-    # print(f'pred_time: {pred_time}')
-    # print(f'true_time: {true_time}')
-    class_count_loss = F.binary_cross_entropy(pred_class_count, true_class_count.float())
+def calculate_loss(model, pred_class_count, pred_time, true_class_count, true_time, training, alpha=1):
+    # Compute the losses
+    class_loss = CustomCrossEntropyLoss()(pred_class_count, true_class_count)
     time_loss = F.mse_loss(pred_time, true_time)
-    alpha = 0.1  # Weight for class count loss
-    total_loss = alpha * class_count_loss +  time_loss
-    return total_loss
+
+    if training:
+        # Zero out any existing gradients
+        model.zero_grad()
+
+        # Calculate gradients for class_loss
+        class_loss.backward(retain_graph=True)
+        class_grads = [p.grad.clone().detach() for p in model.parameters() if p.grad is not None]
+        class_grad_norm = torch.sqrt(sum([g.norm() ** 2 for g in class_grads]))
+
+        # Zero gradients before calculating for the next loss
+        model.zero_grad()
+
+        # Calculate gradients for time_loss
+        time_loss.backward(retain_graph=True)
+        time_grads = [p.grad.clone().detach() for p in model.parameters() if p.grad is not None]
+        time_grad_norm = torch.sqrt(sum([g.norm() ** 2 for g in time_grads]))
+
+        avg_grad_norm = (class_grad_norm + time_grad_norm) / 2
+        class_weight = (class_grad_norm / avg_grad_norm).pow(alpha)
+        time_weight = (time_grad_norm / avg_grad_norm).pow(alpha)
+
+        sum_weights = class_weight + time_weight
+        class_weight /= sum_weights
+        time_weight /= sum_weights
+
+        loss = class_loss * class_weight + time_loss * time_weight
+    else:
+        loss = class_loss + time_loss
+
+    return loss
+
 
 def calculate_accuracy(true_labels, pred_labels):
     true_labels_flat = true_labels.view(-1)
     pred_labels_flat = pred_labels.view(-1)
-    TOs = (true_labels_flat == pred_labels_flat).sum().item()
-    FOs = (true_labels_flat != pred_labels_flat).sum().item()
-    accuracy = TOs / (TOs + FOs)
+    correct_predictions = (true_labels_flat == pred_labels_flat).sum().item()
+    total_predictions = true_labels_flat.size(0)
+    accuracy = correct_predictions / total_predictions
     return accuracy
-
-
 
 def calculate_partial_f1(true_labels, pred_labels):
     precision, recall, f1, _ = precision_recall_fscore_support(true_labels.cpu(), pred_labels.cpu(), average=None)
     return precision, recall, f1
 
-
 def calculate_f1_score(true_labels, pred_labels):
-    f1_scores = f1_score(true_labels, pred_labels, average=None)  # Get F1 score for each class
+    f1_scores = f1_score(true_labels.cpu(), pred_labels.cpu(), average=None)  # Get F1 score for each class
     return f1_scores
 
 def calculate_weighted_f1_score(true_labels, pred_labels):
-    f1_weighted = f1_score(true_labels, pred_labels, average='weighted')
+    f1_weighted = f1_score(true_labels.cpu(), pred_labels.cpu(), average='weighted')
     return f1_weighted
 
-def calculate_silhouette_score(features, labels):
-    silhouette_avg = silhouette_score(features, labels)
-    return silhouette_avg
-
-def train(model, train_loader, epochs, learning_rate, device):
+def train_and_evaluate(model, train_loader, val_loader, epochs, learning_rate, device):
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
     for epoch in range(epochs):
         running_loss = 0.0
         model.train()
         for i, (inputs, time_labels, class_labels) in enumerate(train_loader):
-            inputs, class_labels, time_labels = inputs.to(device), class_labels.to(device), time_labels.to(device)
+            inputs, class_labels, time_labels  = inputs.to(device), class_labels.to(device), time_labels.to(device)
             
             optimizer.zero_grad()
             class_outputs, time_outputs = model(inputs)
             
-            loss = calculate_loss(class_outputs, time_outputs, class_labels, time_labels)
+            loss = calculate_loss(model, class_outputs, time_outputs, class_labels, time_labels,True)
             loss.backward()
             optimizer.step()
             
             running_loss += loss.item()
             print(f'Step [{i + 1}/{len(train_loader)}], Loss: {loss.item():.4f}', end='\r')
+
         
         avg_loss = running_loss / len(train_loader)
         print(f'Epoch [{epoch + 1}/{epochs}], Loss: {avg_loss:.4f}')
+        
+        # Validation phase
+        # Validation phase
+                # Validation phase
+        model.eval()
+        val_running_loss = 0.0
+        val_correct = 0
+        val_total = 0
+        val_f1_accumulated = 0.0
+        val_weighted_f1_accumulated = 0.0
+        val_time_loss = 0.0
+        batch_count = 0
+
+        with torch.no_grad():
+            for i, (inputs, time_labels, class_labels) in enumerate(val_loader):
+                inputs, class_labels, time_labels = inputs.to(device), class_labels.to(device), time_labels.to(device)
+                class_outputs, time_outputs = model(inputs)
+                
+                val_loss = calculate_loss(model, class_outputs, time_outputs, class_labels, time_labels, training=False)
+                val_running_loss += val_loss.item()
+                
+                # Convert class_outputs to predicted labels
+                _, predicted = torch.max(class_outputs, 1)
+                
+                # Convert class_labels from one-hot encoding to class indices
+                class_labels_indices = torch.argmax(class_labels, dim=1)
+
+                # Ensure predicted and class_labels_indices are of the same shape
+                val_correct += (predicted == class_labels_indices).sum().item()
+                val_total += class_labels.size(0)
+                
+                # Calculate batch-wise F1 and accumulate
+                batch_f1 = calculate_f1_score(class_labels_indices.cpu(), predicted.cpu())
+                batch_weighted_f1 = calculate_weighted_f1_score(class_labels_indices.cpu(), predicted.cpu())
+                
+                val_f1_accumulated += batch_f1.mean()  # Average F1 score for this batch
+                val_weighted_f1_accumulated += batch_weighted_f1
+                batch_count += 1
+                
+                # Calculate time loss
+                time_loss = F.mse_loss(time_outputs, time_labels)
+                val_time_loss += time_loss.item()
+                
+            val_avg_loss = val_running_loss / len(val_loader)
+            val_accuracy = val_correct / val_total
+            avg_f1 = val_f1_accumulated / batch_count
+            avg_weighted_f1 = val_weighted_f1_accumulated / batch_count
+            avg_time_loss = val_time_loss / len(val_loader)
+            
+            print(f'Validation Loss: {val_avg_loss:.4f}, Accuracy: {val_accuracy:.4f}, Avg F1: {avg_f1:.4f}, Avg Weighted F1: {avg_weighted_f1:.4f}, Avg Time Loss: {avg_time_loss:.4f}')
+
 
     print('Training completed')
     torch.save(model.state_dict(), 'trained_model.pth')
-
-def evaluate_model(model, val_loader, device):
-    model.eval()
-    val_loss = 0.0
-    correct = 0
-    total = 0
-    precision_sum = 0
-    recall_sum = 0
-    f1_sum = 0
-    num_batches = 0
-
-    with torch.no_grad():
-        for inputs, time_labels, class_labels in val_loader:
-            inputs, class_labels, time_labels = inputs.to(device), class_labels.to(device), time_labels.to(device)
-            class_outputs, time_outputs = model(inputs)
-            
-            loss = calculate_loss(class_outputs, time_outputs, class_labels, time_labels)
-            val_loss += loss.item()
-            
-            # Compute partial metrics
-            _, predicted = torch.max(class_outputs, 1)
-            batch_correct, batch_total = calculate_accuracy(class_labels, predicted)
-            correct += batch_correct
-            total += batch_total
-            
-            precision, recall, f1 = calculate_partial_f1(class_labels, predicted)
-            precision_sum += precision
-            recall_sum += recall
-            f1_sum += f1
-            num_batches += 1
-
-    avg_val_loss = val_loss / len(val_loader)
-    accuracy = correct / total
-    avg_precision = precision_sum / num_batches
-    avg_recall = recall_sum / num_batches
-    avg_f1 = f1_sum / num_batches
-
-    return avg_val_loss, accuracy, avg_precision, avg_recall, avg_f1
-
-# Training and evaluation functions
-def train_and_evaluate(model, train_loader, val_loader, epochs, learning_rate, device):
-    train(model, train_loader, epochs, learning_rate, device)
-    
-    # Load the trained model
-    model.load_state_dict(torch.load('trained_model.pth'))
-    
-    # Evaluate the model
-    avg_val_loss, accuracy, avg_precision, avg_recall, avg_f1 = evaluate_model(model, val_loader, device)
-    
-    print(f'Final Validation Loss: {avg_val_loss:.4f}')
-    print(f'Final Accuracy: {accuracy:.4f}')
-    print(f'Final Precision: {avg_precision.mean():.4f}')
-    print(f'Final Recall: {avg_recall.mean():.4f}')
-    print(f'Final F1 Score: {avg_f1.mean():.4f}')
 
 def save_model(model, save_path):
     torch.save(model.state_dict(), save_path)
@@ -174,7 +187,7 @@ def main():
     args = parse_args()
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    if device.type == 'cpu' and torch.backends.mps.is_available():  # For macOS with Metal Performance Shaders
+    if device.type == 'cpu' and torch.backends.mps is available():  # For macOS with Metal Performance Shaders
         device = torch.device('mps')
 
     train_loader, val_loader = load_data(args.data_dir, args.batch_size)
